@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import time
 
 #finite spatial step
-d = 1e-9
+d = 1e-14
 
 # timesteps
 dt = 0.001

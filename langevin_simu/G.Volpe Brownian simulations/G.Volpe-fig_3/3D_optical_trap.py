@@ -14,9 +14,9 @@ viscosity_NS_m2 = 0.001
 load = 6*np.pi*viscosity_NS_m2*R_m 
 tau = m_kg/load
 diffusion = k_b*T_K/load
-kx = 1*(10e-4)*(10e-15)/(10e-9) #10e-6 femto_Newton/nm
-ky = 1*(10e-4)*(10e-15)/(10e-9)
-kz = 0.2*(10e-4)*(10e-15)/(10e-9)
+kx = 1*(1)*(10e-15)/(10e-9) #10e-6 femto_Newton/nm
+ky = 1*(1)*(10e-15)/(10e-9)
+kz = 0.2*(1)*(10e-15)/(10e-9)
 ratio_phi = kx/load
 print('ratio_phi',ratio_phi)
 print('tau',tau)
@@ -50,7 +50,7 @@ class traj_3D :
             x[i] = x[i-1] - (1/load)*kx*x[i-1]*dt_s + np.sqrt(2*diffusion*dt_s)*w_x[i]
             y[i] = y[i-1] - (1/load)*ky*y[i-1]*dt_s + np.sqrt(2*diffusion*dt_s)*w_y[i]    
             z[i] = z[i-1] - (1/load)*kz*z[i-1]*dt_s + np.sqrt(2*diffusion*dt_s)*w_z[i]
-
+               
         return x,y,z
 
     def plot3Dtraj(self):
