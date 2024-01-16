@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
 
 
 
@@ -59,15 +58,10 @@ def msd_W_trajs(W,N,amplitude):
     mean_msd = mean_msd[1000:-int(len(mean_msd)/2)]
     return mean_msd
 
-def smooth_data(mean_msd,ww_size):
-    window_size = 200
-    smoothed_ma = np.convolve(mean_msd, np.ones(window_size)/window_size, mode='valid')
-    mean_msd = smoothed_ma
-    return mean_msd
 
 def slope_fit(t,mean_msd):
     slope, _ = np.polyfit(t, mean_msd, 1)
-    simulated_diffusion = slope
+    simulated_diffusion = slope/2
     return simulated_diffusion
 
 def factor1(x,amplitude):
@@ -78,7 +72,7 @@ def factor2(x,amplitude):
     return (np.exp(- periodic_potential(amplitude,x+h))-np.exp(-periodic_potential(amplitude,x-h)))/(2*h)
 
 def lifson_jackson(amplitude):
-    X = np.linspace(0,1/frequency,100000)
+    X = np.linspace(0,1/frequency,10000)
     lifson_jackson1 = rotational_einstein_diff/(np.mean(factor1(X,amplitude))*np.mean(factor2(X,amplitude)))
     return lifson_jackson1 
 
@@ -87,19 +81,16 @@ def Bessel(A):
     D = rotational_einstein_diff/(I0*I0)
     return D
 
-
 def simulate(amplitude,nb_traj,traj_length):
     mean_msd = msd_W_trajs(nb_traj,traj_length,amplitude)
     t = np.arange(len(mean_msd))*dt_s
-    mean_msd = smooth_data(mean_msd,ww_size = 200)
-    t = np.arange(len(mean_msd))*dt_s
     simulated_diffusion = slope_fit(t,mean_msd)
-    Lifson_jackson_diffusion_coefficient = lifson_jackson(amplitude)
-    bessel_diffusion_coefficient = Bessel(amplitude)
+    Lifson_jackson_diffusion_coefficient = 0#lifson_jackson(amplitude)
+    bessel_diffusion_coefficient = 0#Bessel(amplitude)
     return simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient
 
 def compare():
-    amplitude_array = np.arange(0.1,10,0.05)
+    amplitude_array = np.linspace(0,1e-5,100)
     simulated_diffusion_array,Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array, = np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array))
     counter = 0
     for amplitude in amplitude_array:
@@ -111,24 +102,22 @@ def compare():
     
     return amplitude_array,simulated_diffusion_array,Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array
 
-
-A,L,M,N = compare()
-
-L = smooth_data(L,ww_size = 2)
-print(len(L))
-Abis = A[:len(L)]
-print(len(Abis)) 
-plt.plot(Abis,L,label = 'Simulated diffusion')
-plt.plot(A,M,label = 'Lifson_Jackson diffusion')
-plt.plot(A,N,label = 'Bessel approximation')
-plt.xscale('log')
-plt.yscale('log')
-plt.xlabel('Amplitude in k_B T unit')
-plt.ylabel('diffusion coefficient [rad2/s]')
-plt.legend()
-plt.show()
-
-
+def run():
+    
+    A,S,LJ,B = compare()
+    
+    rot_array = np.ones(len(A))
+    rot_array *= rotational_einstein_diff
+    simu_mean = np.mean(S)
+    plt.hist(S,density = True)
+    plt.axvline(x=rotational_einstein_diff, color='green', label='Einstein diffusion')
+    plt.axvline(x=simu_mean, color='red', linestyle='--', label='Mean of simulated diffusion')
+    plt.xlabel('Diffusion coefficient [rad2/s]')
+    plt.ylabel('Density ')
+    plt.legend()
+    plt.show()
+    print(S)
+run()
 
 
 
