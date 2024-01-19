@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
-
+from scipy.integrate import quad
 
 
 
@@ -59,27 +58,20 @@ def msd_W_trajs(W,N,amplitude):
     mean_msd = mean_msd[1000:-int(len(mean_msd)/2)]
     return mean_msd
 
-def smooth_data(mean_msd,ww_size):
-    window_size = 200
-    smoothed_ma = np.convolve(mean_msd, np.ones(window_size)/window_size, mode='valid')
-    mean_msd = smoothed_ma
-    return mean_msd
 
 def slope_fit(t,mean_msd):
     slope, _ = np.polyfit(t, mean_msd, 1)
-    simulated_diffusion = slope
+    simulated_diffusion = slope/2
     return simulated_diffusion
 
-def factor1(x,amplitude):
+def factor1(amplitude):  
+    result, _ = quad(integrand1, -np.pi/26, np.pi/26, args=(amplitude))
+    return result
+def integrand1(x,amplitude):
     return np.exp(periodic_potential(amplitude,x))
 
-def factor2(x,amplitude):
-    h = 1e-12
-    return (np.exp(- periodic_potential(amplitude,x+h))-np.exp(-periodic_potential(amplitude,x-h)))/(2*h)
-
 def lifson_jackson(amplitude):
-    X = np.linspace(0,1/frequency,100000)
-    lifson_jackson1 = rotational_einstein_diff/(np.mean(factor1(X,amplitude))*np.mean(factor2(X,amplitude)))
+    lifson_jackson1 = rotational_einstein_diff*(2*np.pi/frequency)**2/((factor1(amplitude))*(factor1(-amplitude)))
     return lifson_jackson1 
 
 def Bessel(A):
@@ -87,11 +79,8 @@ def Bessel(A):
     D = rotational_einstein_diff/(I0*I0)
     return D
 
-
 def simulate(amplitude,nb_traj,traj_length):
     mean_msd = msd_W_trajs(nb_traj,traj_length,amplitude)
-    t = np.arange(len(mean_msd))*dt_s
-    mean_msd = smooth_data(mean_msd,ww_size = 200)
     t = np.arange(len(mean_msd))*dt_s
     simulated_diffusion = slope_fit(t,mean_msd)
     Lifson_jackson_diffusion_coefficient = lifson_jackson(amplitude)
@@ -99,11 +88,11 @@ def simulate(amplitude,nb_traj,traj_length):
     return simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient
 
 def compare():
-    amplitude_array = np.arange(0.1,10,0.05)
+    amplitude_array = np.linspace(0,1,50)
     simulated_diffusion_array,Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array, = np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array))
     counter = 0
     for amplitude in amplitude_array:
-        simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 50,traj_length=5000)
+        simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 20,traj_length=5000)
         simulated_diffusion_array[counter] = simulated_diffusion
         Lifson_jackson_diffusion_coefficient_array[counter] = Lifson_jackson_diffusion_coefficient
         bessel_diffusion_coefficient_array[counter] = bessel_diffusion_coefficient
@@ -111,25 +100,35 @@ def compare():
     
     return amplitude_array,simulated_diffusion_array,Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array
 
+def run_simulation_noforce():
+    A,S,LJ,B = compare()
+    rot_array = np.ones(len(A))
+    rot_array *= rotational_einstein_diff
+    plt.plot(A,rot_array,label = 'Simulated diffusion')
+    plt.plot(A,S,label = 'Simulated diffusion')
+    plt.plot(A,LJ,label = 'Lifson_Jackson diffusion')
+    plt.plot(A,B,label = 'Bessel approximation')
+    plt.xlabel('Barrier amplitude [k_B T]')
+    plt.ylabel('Diffusion coefficient [rad2/s] ')
+    plt.legend()
+    plt.show()
+   
+    
+def run_theory():
+    amplitude_array = np.linspace(0,10,1000)
+    Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array, = np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array))
+    counter = 0
+    for amplitude in amplitude_array:
+        _,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 0,traj_length=0)
+        Lifson_jackson_diffusion_coefficient_array[counter] = Lifson_jackson_diffusion_coefficient
+        bessel_diffusion_coefficient_array[counter] = bessel_diffusion_coefficient
+        counter += 1
 
-A,L,M,N = compare()
-
-L = smooth_data(L,ww_size = 2)
-print(len(L))
-Abis = A[:len(L)]
-print(len(Abis)) 
-plt.plot(Abis,L,label = 'Simulated diffusion')
-plt.plot(A,M,label = 'Lifson_Jackson diffusion')
-plt.plot(A,N,label = 'Bessel approximation')
-plt.xscale('log')
-plt.yscale('log')
-plt.xlabel('Amplitude in k_B T unit')
-plt.ylabel('diffusion coefficient [rad2/s]')
-plt.legend()
-plt.show()
-
-
-
+    plt.plot(amplitude_array,Lifson_jackson_diffusion_coefficient_array,label = 'Lifson_Jackson diffusion')
+    plt.plot(amplitude_array,bessel_diffusion_coefficient_array,label = 'Bessel approximation')
+    plt.legend()
+    plt.show()
+    
 
 
 
