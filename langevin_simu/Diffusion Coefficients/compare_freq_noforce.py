@@ -15,8 +15,10 @@ simulation_f23 = DiffusionSimulation(frequency = 23)
 simu_list = [simulation_f29, simulation_f28, simulation_f27, simulation_f26, simulation_f25, simulation_f24, simulation_f23]
 
 for sim in simu_list:
-    A,B, = sim.Lifson_Jack_Simu()
-    plt.plot(A,B,label = str(sim.frequency))
+    A,B = sim.Lifson_Jack_vs_amp(np.linspace(0, 5, 1000))
+    plt.plot(A, B, label=f'periodicity\n ({sim.frequency})')
+    plt.xlabel('Barrier amplitude [k_b T]')
+    plt.ylabel('D_eff [rad².s-1]')
     plt.legend()
     
 plt.show()
