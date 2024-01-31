@@ -119,7 +119,7 @@ def run_theory():
     Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array, = np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array))
     counter = 0
     for amplitude in amplitude_array:
-        _,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 0,traj_length=0)
+        _,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 0,traj_length=1)
         Lifson_jackson_diffusion_coefficient_array[counter] = Lifson_jackson_diffusion_coefficient
         bessel_diffusion_coefficient_array[counter] = bessel_diffusion_coefficient
         counter += 1

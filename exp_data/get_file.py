@@ -3,6 +3,7 @@ import os
 import json
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 def load():
     data = torch.load('/home/antonin/Documents/GitHub/IDIL_Internship_BFM_Langevin_modeling/exp_data/trajectory.pt')
@@ -36,15 +37,25 @@ def slope_fit(t,msd):
     diffusion = slope/2
     return diffusion
 
+def super_diffusion(x, D, alpha):
+    return 2*D * x**alpha
+
+def fit_super_diffusion(x_data, y_data):
+    params, _ = curve_fit(super_diffusion, x_data, y_data)
+    D_opt, alpha_opt = params
+    return D_opt, alpha_opt
+
+
 
 #exp_parameter:
 T_K = 273 + 22
-FPS = 10000
+FPS = 2000
 dt_s = 1/FPS
+space_ratio = 0.095e-6 #m/px
 
 # initialising array
 x,y = traj_array()
-x,y = x[600000:708397],y[600000:708397]
+x,y = x[600000:708397]*space_ratio,y[600000:708397]*space_ratio
 shift_x,shift_y = np.mean(x),np.mean(y)
 x,y = x - shift_x,y - shift_y
 
@@ -59,12 +70,15 @@ ax1.legend()
 
 # diffusion coefficient
 msd = mean_square_displacement(theta_traj)
+#remove_end_aberation
+msd = msd[:-int(len(msd)/20)]
 t = np.arange(0,len(msd),1)*dt_s
-diffusion = slope_fit(t,msd)
+diffusion,alpha = fit_super_diffusion(t,msd)
 ax2.scatter(t,msd,s=1, label = f'Diffusion = {diffusion:.2f}, MSD')
-print(diffusion)
-ax2.set_xlabel('t')
-ax2.set_ylabel('MSD [pixel^2]')
+ax2.plot(t,super_diffusion(t, diffusion, alpha), label = f'Diffusion = {diffusion:.2f} [rad^2.s⁻1],alpha = {alpha:.2f}, MSD',color = 'red')
+print("Diffusion_coefficient = ",diffusion,'alpha = ',alpha)
+ax2.set_xlabel('t[s]')
+ax2.set_ylabel('MSD [rad^2]')
 ax2.legend()
 
 plt.show() 

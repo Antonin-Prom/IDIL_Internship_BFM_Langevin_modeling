@@ -98,6 +98,22 @@ class DiffusionSimulation:
             counter += 1
         return amplitude_array, lifson_jackson_diffusion_coefficient_array
 
+    def LJ_mean_denominator(self, amplitude_array = np.linspace(0, 5, 1000)):
+        LJ_array = np.zeros(len(amplitude_array))
+        counter1 = 0
+        theta = np.linspace(-np.pi/self.frequency, np.pi/self.frequency, 1000)
+        for amplitude in amplitude_array:
+            counter0 = 0
+            denominator1 = np.zeros(len(amplitude_array))
+            denominator2 = np.zeros(len(amplitude_array))
+            for angle in theta:
+                denominator1[counter0] = self.integrand1(angle,amplitude)
+                denominator2[counter0] = self.integrand1(angle,-amplitude)
+                counter0 += 1
+            LJ_array[counter1] = self.rotational_einstein_diff*(np.sinh(self.torque*(2*np.pi / self.frequency)/2))/(self.torque*(2*np.pi / self.frequency)/2) / (np.mean(denominator1) * np.mean(denominator2))
+            counter1 += 1
+        return amplitude_array,LJ_array
+
 
     def compare(self,amplitude_array = np.linspace(0, 5, 50),nb_traj= 2, traj_length=5000):
         simulated_diffusion_array, lifson_jackson_diffusion_coefficient_array, bessel_diffusion_coefficient_array = np.zeros(len(amplitude_array)), np.zeros(len(amplitude_array)), np.zeros(len(amplitude_array))
