@@ -88,11 +88,11 @@ def simulate(amplitude,nb_traj,traj_length):
     return simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient
 
 def compare():
-    amplitude_array = np.linspace(0,1,50)
+    amplitude_array = np.linspace(0,3,100)
     simulated_diffusion_array,Lifson_jackson_diffusion_coefficient_array,bessel_diffusion_coefficient_array, = np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array)),np.zeros(len(amplitude_array))
     counter = 0
     for amplitude in amplitude_array:
-        simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 20,traj_length=5000)
+        simulated_diffusion,Lifson_jackson_diffusion_coefficient,bessel_diffusion_coefficient = simulate(amplitude,nb_traj = 100,traj_length=5000)
         simulated_diffusion_array[counter] = simulated_diffusion
         Lifson_jackson_diffusion_coefficient_array[counter] = Lifson_jackson_diffusion_coefficient
         bessel_diffusion_coefficient_array[counter] = bessel_diffusion_coefficient
@@ -104,10 +104,9 @@ def run_simulation_noforce():
     A,S,LJ,B = compare()
     rot_array = np.ones(len(A))
     rot_array *= rotational_einstein_diff
-    plt.plot(A,rot_array,label = 'Simulated diffusion')
+    plt.plot(A,rot_array,label = 'Einstein diffusion')
     plt.plot(A,S,label = 'Simulated diffusion')
     plt.plot(A,LJ,label = 'Lifson_Jackson diffusion')
-    plt.plot(A,B,label = 'Bessel approximation')
     plt.xlabel('Barrier amplitude [k_B T]')
     plt.ylabel('Diffusion coefficient [rad2/s] ')
     plt.legend()
@@ -129,6 +128,6 @@ def run_theory():
     plt.legend()
     plt.show()
     
-
+run_simulation_noforce()
 
 
