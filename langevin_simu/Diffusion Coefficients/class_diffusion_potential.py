@@ -1,5 +1,8 @@
 import numpy as np
 from scipy.integrate import quad
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
 
 class DiffusionSimulation:
     def __init__(self,frequency = 26, torque = 0):
@@ -24,48 +27,86 @@ class DiffusionSimulation:
         W_seq = np.random.normal(0, standard_deviation, N)
         return W_seq
 
-    def mean_square_displacement(self, array):
-        msd = []
-        centered_array = array - np.mean(array)
-        for j in range(1, int(len(centered_array))):
-            M = np.mean((centered_array[:-j] - centered_array[j:])**2)
-            msd.append(M)
-        return np.array(msd)
+    def mean_square_displacement(self, traj, time_end, time_skip):
+        msd_time = np.arange(time_skip, int(len(traj) * time_end), time_skip)
+        msd = msd_time
+        counter = 0
+        for j in msd_time:
+            msd[counter] = np.mean((traj[:-j] - traj[j:])**2)
+            counter += 1
+            if counter == len(msd) - 1:
+                break
+        return (msd,msd_time)
 
     def periodic_potential(self, A, x):
         return A * np.cos(x * self.frequency)
 
     def static_process(self, N, A):
         x = 0
-        stored_position = []
+        stored_position = np.zeros(N)
         w = self.generate_seq(N)
         for i in np.arange(0, N):
             dx = -(1 / self.rotational_drag) * self.dt_s * (self.periodic_potential(A, x + self.space_step) - self.periodic_potential(A, x)) / self.space_step
             dx = dx + self.torque + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
             x = np.mod(x + dx, 2 * np.pi)
-            stored_position.append(x)
+            stored_position[i] = x
             dx = 0
         return stored_position
 
     def msd_W_trajs(self, W, N, amplitude):
-        msd_list = []
+        msd_list = np.arange(1,W)
         mean_msd = np.zeros(N - 1)
         for j in range(W):
             traj = np.unwrap(self.static_process(N, amplitude * self.k_b * self.T_K))
-            msd_list.append(self.mean_square_displacement(traj))
+            msd_list[j] = self.mean_square_displacement(traj)
         for msd in msd_list:
             mean_msd = np.add(mean_msd, msd)
         mean_msd *= 1 / W
-        mean_msd = mean_msd[1000:-int(len(mean_msd) / 2)]
+        mean_msd = mean_msd[:-int(len(mean_msd) / 2)]
         return mean_msd
+    
+    def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
+        msd_array = []
+        for j in range(W):
+            traj = np.unwrap(self.static_process(N, amplitude * self.k_b * self.T_K))
+            interm,_ = self.mean_square_displacement(traj,time_end,time_skip)
+            msd_array.append(interm)
+        return msd_array
+        
+        
+    def mean_msd_with_exp_variance(self, W, N, amplitude):
+        mean_msd = self.msd_W_trajs(W, N, amplitude)
+        var_array = []
+        for n in range (1,len(mean_msd)): # n is the lag time
+            var = ((2*self.rotational_einstein_diff*n*self.dt_s)**2)*(2*n*n + 1)/(3*n*(N-n+1))
+            var_array.append(var) # ?
+        error_sizes = np.sqrt(var_array)/50
+        return mean_msd, error_sizes
+        
 
+    def error_bar(self, x_values, y_values, error_sizes):
+        plt.errorbar(x_values, y_values, yerr=error_sizes, fmt='o', capsize=5, label='Data with Error Bars')        
+    
     def slope_fit(self, t, mean_msd):
         slope, _ = np.polyfit(t, mean_msd, 1)
         simulated_diffusion = slope / 2
         return simulated_diffusion
+    
+    def super_diffusion(self,t, D):
+        return D*t + (self.torque/self.rotational_drag)*t*t
+
+    def fit_super_diffusion(self,x_data, y_data):
+        params, _ = curve_fit(self.super_diffusion, x_data, y_data)
+        D_opt = params
+        return D_opt
+    
+    """
+    Lifson and Jackson functions
+    Should not be dependent from frequency
+    """
 
     def factor1(self, amplitude):  
-        result, _ = quad(self.integrand1, -np.pi / 26, np.pi / 26, args=(amplitude))
+        result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
         return result
 
     def integrand1(self, x, amplitude):
@@ -101,16 +142,17 @@ class DiffusionSimulation:
     def LJ_mean_denominator(self, amplitude_array = np.linspace(0, 5, 1000)):
         LJ_array = np.zeros(len(amplitude_array))
         counter1 = 0
-        theta = np.linspace(-np.pi/self.frequency, np.pi/self.frequency, 1000)
+        theta = np.linspace(0, 2*np.pi, 1000)
         for amplitude in amplitude_array:
             counter0 = 0
-            denominator1 = np.zeros(len(amplitude_array))
-            denominator2 = np.zeros(len(amplitude_array))
+            denominator1 = np.zeros(len(theta))
+            denominator2 = np.zeros(len(theta))
             for angle in theta:
                 denominator1[counter0] = self.integrand1(angle,amplitude)
                 denominator2[counter0] = self.integrand1(angle,-amplitude)
                 counter0 += 1
-            LJ_array[counter1] = self.rotational_einstein_diff*(np.sinh(self.torque*(2*np.pi / self.frequency)/2))/(self.torque*(2*np.pi / self.frequency)/2) / (np.mean(denominator1) * np.mean(denominator2))
+            LJ_array[counter1] = self.rotational_einstein_diff/ (np.mean(denominator1) * np.mean(denominator2))
+            #*(np.sinh(self.torque*(2*np.pi / self.frequency)/2))/(self.torque*(2*np.pi / self.frequency)/2) 
             counter1 += 1
         return amplitude_array,LJ_array
 

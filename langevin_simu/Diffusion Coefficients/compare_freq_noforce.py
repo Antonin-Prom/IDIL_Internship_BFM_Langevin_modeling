@@ -18,13 +18,13 @@ dt_s = 100*tau
 frequency = 26
 space_step = 1e-12
 
-simulation_f29 = DiffusionSimulation(frequency = 29)
-simulation_f28 = DiffusionSimulation(frequency = 28)
-simulation_f27 = DiffusionSimulation(frequency = 27)
-simulation_f26 = DiffusionSimulation(frequency = 26)
-simulation_f25 = DiffusionSimulation(frequency = 25)
-simulation_f24 = DiffusionSimulation(frequency = 24)
-simulation_f23 = DiffusionSimulation(frequency = 23)
+simulation_f29 = DiffusionSimulation(frequency = 2)
+simulation_f28 = DiffusionSimulation(frequency = 3)
+simulation_f27 = DiffusionSimulation(frequency = 4)
+simulation_f26 = DiffusionSimulation(frequency = 5)
+simulation_f25 = DiffusionSimulation(frequency = 6)
+simulation_f24 = DiffusionSimulation(frequency = 10)
+simulation_f23 = DiffusionSimulation(frequency = 20)
 
 simu_list = [simulation_f29, simulation_f28, simulation_f27, simulation_f26, simulation_f25, simulation_f24, simulation_f23]
 
@@ -36,8 +36,8 @@ for sim in simu_list:
     rot_array *= rotational_einstein_diff
     plt.plot(A,rot_array,label = 'Simulated diffusion')
     plt.plot(A, B, label=f'periodicity\n ({sim.frequency})')
-    plt.xlabel('Barrier amplitude [k_b T]')
-    plt.ylabel('D_eff [rad².s-1]')
-    plt.legend()
+plt.xlabel('Barrier amplitude [k_b T]')
+plt.ylabel('D_eff [rad².s-1]')
+plt.legend()
     
 plt.show()
