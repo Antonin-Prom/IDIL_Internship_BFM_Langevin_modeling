@@ -20,7 +20,7 @@ class DiffusionSimulation:
         self.dt_s = 100 * self.tau
         self.frequency = frequency
         self.space_step = 1e-12
-        self.torque = torque
+        self.torque = torque*self.T_K*self.k_b
 
     def generate_seq(self, N):
         standard_deviation = 1 
@@ -28,15 +28,15 @@ class DiffusionSimulation:
         return W_seq
 
     def mean_square_displacement(self, traj, time_end, time_skip):
-        msd_time = np.arange(time_skip, int(len(traj) * time_end), time_skip)
-        msd = msd_time
-        counter = 0
-        for j in msd_time:
-            msd[counter] = np.mean((traj[:-j] - traj[j:])**2)
-            counter += 1
-            if counter == len(msd) - 1:
-                break
-        return (msd,msd_time)
+        lag_time = np.arange(0, int(len(traj) * time_end), time_skip)
+        msd = []
+        for j in lag_time:
+            if j == 0 :
+                msd.append(0)
+                continue
+            msd.append(np.mean((traj[:-j] - traj[j:])**2))
+        return np.array(msd),lag_time
+    
 
     def periodic_potential(self, A, x):
         return A * np.cos(x * self.frequency)
@@ -66,15 +66,15 @@ class DiffusionSimulation:
         return mean_msd
     
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
-        msd_array = []
+        msd_matrix = []
         for j in range(W):
             traj = np.unwrap(self.static_process(N, amplitude * self.k_b * self.T_K))
             interm,_ = self.mean_square_displacement(traj,time_end,time_skip)
-            msd_array.append(interm)
-        return msd_array
+            msd_matrix.append(interm)
+        return msd_matrix
         
         
-    def mean_msd_with_exp_variance(self, W, N, amplitude):
+    def mean_msd_with_theoretical_variance(self, W, N, amplitude):
         mean_msd = self.msd_W_trajs(W, N, amplitude)
         var_array = []
         for n in range (1,len(mean_msd)): # n is the lag time
@@ -95,6 +95,7 @@ class DiffusionSimulation:
     def super_diffusion(self,t, D):
         return D*t + (self.torque/self.rotational_drag)*t*t
 
+    
     def fit_super_diffusion(self,x_data, y_data):
         params, _ = curve_fit(self.super_diffusion, x_data, y_data)
         D_opt = params

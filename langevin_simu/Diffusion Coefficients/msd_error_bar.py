@@ -4,61 +4,47 @@ import matplotlib.pyplot as plt
 import numpy as np
 from class_diffusion_potential import *
 
-simu1 = DiffusionSimulation(frequency = 26,torque  = 15 )
-
-def expe_msd_error_bar():
-    mean_msd, error_size = simu1.mean_msd_with_variance(50,5000,2)
-    time_array = np.arange(0, len(mean_msd), 1)*simu1.dt_s 
-    plt.plot(time_array, mean_msd)
-    plt.xlabel('time [s]')
-    plt.ylabel('mean square displacement [rad^2]')
-
-    mean_msd= mean_msd[:-1]
-    time_array = time_array[:-1]
-    nb_error_bar = 10
-    L = len(time_array)
-    time_array_err = []
-    mean_msd_err = []
-    error_size_err = []
-    for i in range(1,nb_error_bar):
-        time_array_err.append(time_array[L*i//nb_error_bar])
-        mean_msd_err.append(mean_msd[L*i//nb_error_bar])
-        error_size_err.append(error_size[L*i//nb_error_bar])
-    simu1.error_bar(time_array_err, mean_msd_err, error_size_err)
-    plt.show()
-    
-def msd_error_bar():
+simu1 = DiffusionSimulation(frequency = 26,torque  = 0 )
+simu2 = DiffusionSimulation(frequency = 26,torque  = 100 )
+def msd_with_std_no_torque(simu,barrier):
     W = 10 # number of trajectories
     N = 10000 # number of steps
-    barrier = 2 #kbT
     time_skip = 10
-    msd_matrix = simu1.msd_in_matrix(W, N, barrier,time_end = 1, time_skip = 100)
-    msd_mean = np.mean(msd_matrix, axis=0)
-    print(msd_mean)
+    msd_matrix = simu.msd_in_matrix(W, N, barrier,time_end = 1/4, time_skip = time_skip)
+    msd_mean = np.mean(msd_matrix, axis = 0)
     msd_std = np.std(msd_matrix, axis=0)
-
-    time_array = np.arange(0, len(msd_mean), 1)*time_skip*simu1.dt_s 
-    msd_mean= msd_mean[:-1]
-    time_array = time_array[:-1]
-    nb_error_bar = 20
-    L = len(time_array)
-    time_array_err = []
-    msd_std_err = []
-    msd_mean_err = []
-
-    for i in range(1,nb_error_bar):
-        time_array_err.append(time_array[L*i//nb_error_bar])
-        msd_mean_err.append(msd_mean[L*i//nb_error_bar])
-        msd_std_err.append(msd_std[L*i//nb_error_bar])
-    
-    #fitting 
-    D_opt = simu1.fit_super_diffusion(time_array, msd_mean)
-    plt.plot(time_array,simu1.super_diffusion(time_array, D_opt),color = 'red')
-    plt.plot(time_array, msd_mean)
+    time_array = np.arange(1, len(msd_mean) + 1) * simu.dt_s * time_skip
+    einstein_diff =simu.slope_fit(time_array,msd_mean)
+    #plt.plot(time_array, 2*einstein_diff * time_array, 'r', label = f'fit, D_fit = {einstein_diff:.2f}, D_theory = {simu.rotational_einstein_diff:.2f}, D_fit/D_theory = {einstein_diff/simu.rotational_einstein_diff:.2f},barrier amplitude in kT = {barrier:.2f}, torque = {simu.torque:.2f}, msd points : {len(msd_mean)}')
+    #plt.fill_between(time_array, msd_mean + msd_std, msd_mean -msd_std, color='gray', alpha=0.5, label='Std')
+    plt.scatter(time_array, msd_mean, label = f'Mean MSD, amplitude =  {barrier:.2f}', s = 0.5)
+    plt.legend()
     plt.xlabel('time [s]')
-    plt.ylabel('mean square displacement [rad^2]')
-    simu1.error_bar(time_array_err, msd_mean_err, msd_std_err)
+    plt.ylabel(f'mean square displacement [rad^2]')
+    
+    
+for i in range (0,1000,100):
+    traj = np.unwrap(simu1.static_process(1000, i))
+    plt.plot(np.arange(0, len(traj)) * simu1.dt_s, traj, label = 'amplitude [kT]= ' + str(i))
+    plt.legend()
+plt.show()
+
+def msd_with_std_with_torque(simu):
+    W = 50 # number of trajectories
+    N = 100000 # number of steps
+    barrier = 0 #kbT
+    time_skip = 100
+    msd_matrix = simu.msd_in_matrix(W, N, barrier,time_end = 1/4, time_skip = time_skip)
+    msd_mean = np.mean(msd_matrix, axis = 0)
+    msd_std = np.std(msd_matrix, axis=0)
+    time_array = np.arange(1, len(msd_mean) + 1) * simu.dt_s * time_skip
+    einstein_diff =simu.slope_fit(time_array,msd_mean)
+    plt.plot(time_array, 2*einstein_diff * time_array, 'r', label = f'fit, D_fit = {einstein_diff:.2f}, D_theory = {simu.rotational_einstein_diff:.2f}, D_fit/D_theory = {einstein_diff/simu.rotational_einstein_diff:.2f}, barrier amplitude in kT = {barrier:.2f}, torque = {simu.torque:.2f}, msd points : {len(msd_mean)}')
+    plt.fill_between(time_array, msd_mean + msd_std, msd_mean -msd_std, color='gray', alpha=0.5, label='Std')
+    plt.scatter(time_array, msd_mean, color = 'black', label = 'Mean MSD', s = 0.5)
+    plt.xlabel('time [s]')
+    plt.ylabel(f'mean square displacement [rad^2], ')
+    plt.legend()
     plt.show()
 
-print(simu1.dt_s)
-msd_error_bar()
+#msd_with_std_no_torque(simu1)
