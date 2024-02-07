@@ -42,6 +42,7 @@ class DiffusionSimulation:
         return A * np.cos(x * self.frequency)
 
     def static_process(self, N, A):
+        A *= self.k_b * self.T_K
         x = 0
         stored_position = np.zeros(N)
         w = self.generate_seq(N)
@@ -68,7 +69,7 @@ class DiffusionSimulation:
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
         msd_matrix = []
         for j in range(W):
-            traj = np.unwrap(self.static_process(N, amplitude * self.k_b * self.T_K))
+            traj = np.unwrap(self.static_process(N, amplitude ))
             interm,_ = self.mean_square_displacement(traj,time_end,time_skip)
             msd_matrix.append(interm)
         return msd_matrix
@@ -97,9 +98,9 @@ class DiffusionSimulation:
 
     
     def fit_super_diffusion(self,x_data, y_data):
-        params, _ = curve_fit(self.super_diffusion, x_data, y_data)
-        D_opt = params
-        return D_opt
+        D_opt, covar = curve_fit(self.super_diffusion, x_data, y_data)
+        std = np.sqrt(np.diag(covar))
+        return D_opt,std
     
     """
     Lifson and Jackson functions
