@@ -7,11 +7,11 @@ sys.path.append('/home/antonin/Documents/GitHub/IDIL_Internship_BFM_Langevin_mod
 from Class_particle_in_potential import *
 
 
-dt_list = [1e-3,1e-4,1e-1,1,2,10]
+dt_list = [1e-8,1e-7,1e-6,1e-5,1e-4]
 def break_simu():
     for dt in dt_list:
         simu = DiffusionSimulation(frequency = 26,torque  = 10,dt = dt )
-        N = int(300/dt) # Number of step
+        N = int(3/dt) # Number of step
         time_skip = int(N/10)
         msd_matrix = simu.msd_in_matrix(10, N, 0,time_end = 1/4, time_skip = time_skip)
         msd_mean = np.mean(msd_matrix, axis = 0)

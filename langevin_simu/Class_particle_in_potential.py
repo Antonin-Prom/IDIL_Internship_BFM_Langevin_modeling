@@ -14,10 +14,11 @@ class DiffusionSimulation:
         self.viscosity_NS_m2 = 0.001
         self.load = 6 * np.pi * self.viscosity_NS_m2 * self.R_m 
         self.rotational_drag = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
-        self.tau = self.m_kg / self.load
+        self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
+        self.tau = self.moment_inertia / self.rotational_drag
         self.einstein_diffusion = self.k_b * self.T_K / self.load
         self.rotational_einstein_diff = self.k_b * self.T_K / self.rotational_drag
-        self.dt_s = dt #100 * self.tau
+        self.dt_s = dt # tau
         self.frequency = frequency
         self.space_step = 1e-12
         self.torque = torque*self.T_K*self.k_b
@@ -72,6 +73,7 @@ class DiffusionSimulation:
             x = np.mod(x + dx, 2 * np.pi)
             stored_position[i] = x
             dx = 0
+        # stored_position = np.array([np.mod(x, 2 * np.pi) for x in np.cumsum(constant_term * dt_s * (tilted_periodic_potential(A, np.roll(x, 1)) - tilted_periodic_potential(A, x)) / space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w)
         return stored_position
     
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
