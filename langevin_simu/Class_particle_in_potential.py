@@ -68,14 +68,13 @@ class DiffusionSimulation:
         stored_position = np.zeros(N)
         w = self.generate_seq(N)
         for i in np.arange(0, N):
-            dx = -(1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step
-            dx = dx + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
-            #x = np.mod(x + dx, 2 * np.pi)
+            dx = -(1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
+            x = np.mod(x + dx, 2 * np.pi)
             stored_position[i] = x
-        return stored_position,w
+        return stored_position
 
 
-    def proceed_traj(self, N, A,w):
+    def proceed_traj1(self, N, A):
         """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
 
         Args:
@@ -85,16 +84,11 @@ class DiffusionSimulation:
         Returns:
             array: angular trajectory
         """
+        w = self.generate_seq(N)
         A *= self.k_b * self.T_K
-        x = np.zeros(N)
-        dx = np.zeros(N)
-
-        stored_position = [(x := x + (-(1 / self.rotational_drag) * self.dt_s * 
-        (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step 
-        + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i])
-        )for i in range(N)]
-        return stored_position
-        
+        x = 0 
+        positions = [ x := np.mod((x - (1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]),2*np.pi) for i in range(N)]
+        return positions    
     
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
         """ Compute multiple trajectories than perform mean square displacement and return it in a matrix
