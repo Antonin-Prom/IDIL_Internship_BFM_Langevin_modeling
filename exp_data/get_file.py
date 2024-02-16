@@ -54,14 +54,16 @@ dt_s = 1/FPS
 space_ratio = 0.095e-6 #m/px
 
 # initialising array
-x,y = traj_array()
-x,y = x[600000:708397]*space_ratio,y[600000:708397]*space_ratio
-shift_x,shift_y = np.mean(x),np.mean(y)
-x,y = x - shift_x,y - shift_y
+def exp_traj():
+    x,y = traj_array()
+    x,y = x[600000:708397]*space_ratio,y[600000:708397]*space_ratio
+    shift_x,shift_y = np.mean(x),np.mean(y)
+    x,y = x - shift_x,y - shift_y
+    theta_traj = convert_to_angle(x,y)
+    t = np.arange(0,len(theta_traj),1)*dt_s
+    return t,theta_traj,x,y
 
-theta_traj = convert_to_angle(x,y)
-t = np.arange(0,len(theta_traj),1)*dt_s
-
+t,theta_traj,x,y = exp_traj()
 fig,(ax1,ax2) = plt.subplots(1,2)
 ax1.scatter(x,y,s=1)
 ax1.set_xlabel('x')

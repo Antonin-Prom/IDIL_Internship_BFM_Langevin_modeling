@@ -70,11 +70,31 @@ class DiffusionSimulation:
         for i in np.arange(0, N):
             dx = -(1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step
             dx = dx + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
-            x = np.mod(x + dx, 2 * np.pi)
+            #x = np.mod(x + dx, 2 * np.pi)
             stored_position[i] = x
-            dx = 0
-        # stored_position = np.array([np.mod(x, 2 * np.pi) for x in np.cumsum(constant_term * dt_s * (tilted_periodic_potential(A, np.roll(x, 1)) - tilted_periodic_potential(A, x)) / space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w)
+        return stored_position,w
+
+
+    def proceed_traj(self, N, A,w):
+        """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
+
+        Args:
+            N (int): trajectory length
+            A (float): barrier amplitude 
+
+        Returns:
+            array: angular trajectory
+        """
+        A *= self.k_b * self.T_K
+        x = np.zeros(N)
+        dx = np.zeros(N)
+
+        stored_position = [(x := x + (-(1 / self.rotational_drag) * self.dt_s * 
+        (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step 
+        + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i])
+        )for i in range(N)]
         return stored_position
+        
     
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
         """ Compute multiple trajectories than perform mean square displacement and return it in a matrix
