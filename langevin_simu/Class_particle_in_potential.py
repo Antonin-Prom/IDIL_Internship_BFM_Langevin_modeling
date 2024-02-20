@@ -5,7 +5,7 @@ from scipy.optimize import curve_fit
 
 
 class DiffusionSimulation:
-    def __init__(self,frequency = 26, torque = 0, dt=1e-12):
+    def __init__(self,frequency = 26, torque = 0, dt=1e-6):
         # Constants
         self.T_K = 300
         self.k_b = 1.3806452e-23
@@ -42,11 +42,33 @@ class DiffusionSimulation:
         """
         lag_time = np.arange(0, int(len(traj) * time_end), time_skip)
         msd = []
+        np.zeros(int(len(traj*time_end)/time_skip))
         for j in lag_time:
             if j == 0 :
                 msd.append(0)
                 continue
             msd.append(np.mean((traj[:-j] - traj[j:])**2))
+        return np.array(msd),lag_time
+    
+    def mean_square_displacement1(self, traj, time_end, time_skip):
+        """Compute the mean square displacement by iterating through an array of lag times
+
+        Args:
+            traj (array): The targeted array of positions.
+            time_end (float): The iterated fraction of the trajectory length.
+            time_skip (int): Quantity of points skiped when performing msd.
+
+        Returns:
+            array: The mean square displacement
+            array: The lag times array    
+        """
+        lag_time = np.arange(0, int(len(traj) * time_end), time_skip)
+        msd = np.zeros(int(len(traj)*time_end/time_skip))
+        for i,j in zip(range(len(lag_time)),lag_time):
+            if j == 0 :
+                msd[0] = 0
+                continue
+            msd[i] = (np.mean((traj[:-j] - traj[j:])**2))
         return np.array(msd),lag_time
     
 
@@ -68,7 +90,7 @@ class DiffusionSimulation:
         stored_position = np.zeros(N)
         w = self.generate_seq(N)
         for i in np.arange(0, N):
-            dx = -(1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
+            dx = -(1 / self.rotational_drag) * self.dt_s * ((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x-self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
             x = np.mod(x + dx, 2 * np.pi)
             stored_position[i] = x
         return stored_position
@@ -88,7 +110,7 @@ class DiffusionSimulation:
         A *= self.k_b * self.T_K
         x = 0 
         positions = [ x := np.mod((x - (1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]),2*np.pi) for i in range(N)]
-        return positions    
+        return np.array(positions)    
     
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
         """ Compute multiple trajectories than perform mean square displacement and return it in a matrix
@@ -105,7 +127,7 @@ class DiffusionSimulation:
         """
         msd_matrix = []
         for j in range(W):
-            traj = np.unwrap(self.static_process(N, amplitude ))
+            traj = np.unwrap(self.proceed_traj1(N, amplitude ))
             interm,_ = self.mean_square_displacement(traj,time_end,time_skip)
             msd_matrix.append(interm)
         return msd_matrix
@@ -130,8 +152,8 @@ class DiffusionSimulation:
         for n in range (1,len(mean_msd)): # n is the lag time
             var = ((2*self.rotational_einstein_diff*n*self.dt_s)**2)*(2*n*n + 1)/(3*n*(N-n+1))
             var_array.append(var) # ?
-        error_sizes = np.sqrt(var_array)/50
-        return mean_msd, error_sizes
+        error_sizes = np.sqrt(var_array)
+        return mean_msd[:-1], error_sizes
         
 
     def slope_fit(self, t, mean_msd):
@@ -155,13 +177,15 @@ class DiffusionSimulation:
     Lifson and Jackson methods
     """
 
-    def factor1(self, amplitude):  
-        result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
-        return result
+
 
     def integrand1(self, x, amplitude):
         return np.exp(self.tilted_periodic_potential(amplitude, x))
-
+    
+    def factor1(self, amplitude):  
+        result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
+        return result
+    
     def lifson_jackson_noforce(self, amplitude):
         lifson_jackson1 = self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
         return lifson_jackson1 
