@@ -42,7 +42,6 @@ class DiffusionSimulation:
         """
         lag_time = np.arange(0, int(len(traj) * time_end), time_skip)
         msd = []
-        np.zeros(int(len(traj*time_end)/time_skip))
         for j in lag_time:
             if j == 0 :
                 msd.append(0)
@@ -73,7 +72,7 @@ class DiffusionSimulation:
     
 
     def tilted_periodic_potential(self, A, x):
-        return self.torque*x + A * np.cos(x * self.frequency)
+        return self.torque*x + A * np.sin(x * self.frequency)
 
     def static_process(self, N, A):
         """ Perform the overdamped rotational langevin dynamic simulation in a given potential, all units are in S.I.
@@ -108,7 +107,7 @@ class DiffusionSimulation:
         """
         w = self.generate_seq(N)
         A *= self.k_b * self.T_K
-        x = 0 
+        x = 0
         positions = [ x := np.mod((x - (1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]),2*np.pi) for i in range(N)]
         return np.array(positions)    
     
@@ -127,7 +126,7 @@ class DiffusionSimulation:
         """
         msd_matrix = []
         for j in range(W):
-            traj = np.unwrap(self.proceed_traj1(N, amplitude ))
+            traj = np.unwrap(self.static_process(N, amplitude ))
             interm,_ = self.mean_square_displacement(traj,time_end,time_skip)
             msd_matrix.append(interm)
         return msd_matrix
@@ -186,7 +185,7 @@ class DiffusionSimulation:
         result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
         return result
     
-    def lifson_jackson_noforce(self, amplitude):
+    def lifson_jackson_noforce(self, amplitude): #Meet einstein coeff at 0 barrier
         lifson_jackson1 = self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
         return lifson_jackson1 
     
@@ -202,7 +201,7 @@ class DiffusionSimulation:
             counter += 1
         return amplitude_array, lifson_jackson_diffusion_coefficient_array
 
-    def LJ_mean_denominator(self, amplitude_array = np.linspace(0, 5, 1000)):
+    def LJ_mean_denominator(self, amplitude_array = np.linspace(0, 5, 1000)): #Meet einstein coeff at 0 barrier
         """ Compute the effective Lifson & Jackson diffusion coefficient, average is perform by np.mean and not integration.
         
 

@@ -43,7 +43,7 @@ class DiffusionSimulation:
 
     def static_process(self, N, A):
         A *= self.k_b * self.T_K
-        x = 0
+        x = np.pi
         stored_position = np.zeros(N)
         w = self.generate_seq(N)
         for i in np.arange(0, N):
@@ -51,8 +51,8 @@ class DiffusionSimulation:
             dx = dx + self.torque + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
             x = np.mod(x + dx, 2 * np.pi)
             stored_position[i] = x
-            dx = 0
         return stored_position
+    
 
     def msd_W_trajs(self, W, N, amplitude):
         msd_list = np.arange(1,W)
