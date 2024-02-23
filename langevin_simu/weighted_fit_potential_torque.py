@@ -14,8 +14,8 @@ from scipy.optimize import curve_fit
 
 time_end = 1/4
 time_skip = 100  
-W = 20
-N = 500000
+W = 50
+N = 3550000
 einstein_diff = 0.1648
 
 def linear_D(t,D):
@@ -97,6 +97,16 @@ def plot_diffusion_potential_no_torque(amplitude):
     
 #plot_diffusion_potential_no_torque()
 
+t2,msd2,D_eff2,std2,D_LJ2 = diffusion_potential_no_torque(2)
+t6,msd6,D_eff6,std6,D_LJ6 = diffusion_potential_no_torque(6)
+t10,msd10,D_eff10,std10,D_LJ10 = diffusion_potential_no_torque(10)
+
+dict_potential = {'time' : [t2,t6,t10], 'msd' : [msd2,msd6,msd10], 'D_eff' : [D_eff2,D_eff6,D_eff10], 'std' : [std2,std6,std10],'D_LJ' : [D_LJ2,D_LJ6,D_LJ10] }
+np.save('msd_no_torque',dict_potential)
+
+
+
+
 def diffusion_no_potential_torque():
     sim = DiffusionSimulation(dt=1e-6, torque = 10)
     amplitude = 0
@@ -121,13 +131,6 @@ def plot_diffusion_no_potential_torque():
     plt.title(f'MSD : No potential, torque = {torque:.3f} kT')
     plt.legend()
     plt.show()
-    
-    
-    
-    
-    
-    
-    
     
     
     
