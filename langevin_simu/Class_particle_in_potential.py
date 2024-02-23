@@ -22,6 +22,9 @@ class DiffusionSimulation:
         self.frequency = frequency
         self.space_step = 1e-12
         self.torque = torque*self.T_K*self.k_b
+    
+    def max_time_step(self,amplitude):
+        return self.rotational_drag/(amplitude*self.T_K*self.k_b*(self.frequency**2))
 
     def generate_seq(self, N):
         standard_deviation = 1 
@@ -72,7 +75,10 @@ class DiffusionSimulation:
     
 
     def tilted_periodic_potential(self, A, x):
-        return self.torque*x + A * np.sin(x * self.frequency)
+        return self.torque*x + A * np.cos(x * self.frequency)
+    
+    def potential_curvature(self, A, x):
+        return -A*(self.frequency**2)*np.cos(self.frequency*x)
 
     def static_process(self, N, A):
         """ Perform the overdamped rotational langevin dynamic simulation in a given potential, all units are in S.I.

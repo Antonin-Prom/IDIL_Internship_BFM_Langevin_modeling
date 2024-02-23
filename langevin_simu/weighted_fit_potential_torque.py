@@ -13,9 +13,9 @@ from scipy.optimize import curve_fit
 
 
 time_end = 1/4
-time_skip = 100  
+time_skip = 1
 W = 50
-N = 3550000
+N = 1000
 einstein_diff = 0.1648
 
 def linear_D(t,D):
@@ -72,12 +72,14 @@ def plot_LJ_barrier(N):
         
 
 def diffusion_potential_no_torque(amplitude):
-    sim = DiffusionSimulation(dt=1e-5)
+    sim = DiffusionSimulation(dt=1e-3)
     msd_matrix = sim.msd_in_matrix(W, N, amplitude, time_end, time_skip)
     mean_msd = np.mean(msd_matrix,axis=0)
     std = np.std(msd_matrix,axis=0)
     std[0] = std[1]
+    print(sim.max_time_step(amplitude))
     t = np.arange(1,len(mean_msd)+1)*time_skip*sim.dt_s
+    print(sim.dt_s)
     D_LJ = sim.lifson_jackson_noforce(amplitude)
     popt, pcov = scipy.optimize.curve_fit(linear_D, t, mean_msd, sigma = std, p0 = einstein_diff)
     return t,mean_msd,popt[0],std,D_LJ
@@ -95,14 +97,14 @@ def plot_diffusion_potential_no_torque(amplitude):
     plt.legend()
     plt.show()
     
-#plot_diffusion_potential_no_torque()
+plot_diffusion_potential_no_torque(3)
 
-t2,msd2,D_eff2,std2,D_LJ2 = diffusion_potential_no_torque(2)
+""" t2,msd2,D_eff2,std2,D_LJ2 = diffusion_potential_no_torque(2)
 t6,msd6,D_eff6,std6,D_LJ6 = diffusion_potential_no_torque(6)
 t10,msd10,D_eff10,std10,D_LJ10 = diffusion_potential_no_torque(10)
 
 dict_potential = {'time' : [t2,t6,t10], 'msd' : [msd2,msd6,msd10], 'D_eff' : [D_eff2,D_eff6,D_eff10], 'std' : [std2,std6,std10],'D_LJ' : [D_LJ2,D_LJ6,D_LJ10] }
-np.save('msd_no_torque',dict_potential)
+np.save('msd_no_torque',dict_potential) """
 
 
 
@@ -136,7 +138,7 @@ def plot_diffusion_no_potential_torque():
     
     
 def diffusion_no_potential_torque():
-    sim = DiffusionSimulation(dt=1e-6, torque = 10)
+    sim = DiffusionSimulation(dt=1e-3, torque = 10)
     amplitude = 0
     msd_matrix = sim.msd_in_matrix(W, N, amplitude, time_end, time_skip)
     mean_msd = np.mean(msd_matrix,axis=0)
