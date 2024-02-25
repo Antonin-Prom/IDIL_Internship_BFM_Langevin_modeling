@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
-sys.path.append('/home/antonin/Documents/GitHub/IDIL_Internship_BFM_Langevin_modeling/langevin_simu/')
-from Class_particle_in_potential import *
+sys.path.append('C:/Users/CBS/Documents/GitHub/IDIL_Internship_BFM_Langevin_modeling/langevin_simu/Diffusion Coefficients')
+from class_diffusion_potential_old import *
 
 simu1 = DiffusionSimulation(frequency = 26,torque  = 0 )
 simu2 = DiffusionSimulation(frequency = 26,torque  = 100 )
@@ -22,7 +22,7 @@ def msd_with_std_no_torque(simu,barrier):
         float: fit coefficient
         float: theoretical coefficient
     """
-    W = 10 # number of trajectories
+    W = 50 # number of trajectories
     N = 100000 # number of steps
     time_skip = 100
     msd_matrix = simu.msd_in_matrix(W, N, barrier,time_end = 1/4, time_skip = time_skip)
@@ -41,7 +41,9 @@ def plot_msd_no_torque(simu,barrier):
     plt.legend()
     plt.xlabel('time [s]')
     plt.ylabel(f'mean square displacement [rad^2]')
-    
+
+plot_msd_no_torque(simu1,3)
+
 def plot_multiple_msd_no_torque(simu):
     for i in range (0,5,1):
         plot_msd_no_torque(simu,i)

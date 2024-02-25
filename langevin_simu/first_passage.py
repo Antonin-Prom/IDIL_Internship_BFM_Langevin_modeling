@@ -1,5 +1,5 @@
 import numpy as np
-
+from Class_particle_in_potential import *
 
 
 
@@ -32,6 +32,12 @@ def first_passage(frequency,traj,dt):
     mean_pass_time = np.mean(passage_time[:-1] - passage_time[1:])
     return mean_pass_time
 
+def dwell_time(traj,torque,A,L):
+    simu=DiffusionSimulation(dt=1e-6,torque = torque)
+    traj = part.proceed_traj1(L,A)
+    
+    for x in traj:
+        if borne_inf < x < borne_sup :
 
             
         
