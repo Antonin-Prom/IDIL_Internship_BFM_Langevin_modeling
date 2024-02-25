@@ -178,11 +178,28 @@ class DiffusionSimulation:
         std = np.sqrt(np.diag(covar))
         return D_opt,std
     
+
+    """
+    Theory 
+    """
+
+    """
+    MSD
+    """
+
+    def theory_curve(self,time,A):
+        D_eff = self.lifson_jackson_noforce(A)
+        msd = []
+        for t in time :
+            def integrand_msd(y):
+                return y*y*np.exp(-self.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)   
+            msd_coef =  quad(integrand_msd, -np.inf,np.inf)[0]
+            msd.append(msd_coef)
+        return np.array(msd)
+        
     """
     Lifson and Jackson methods
     """
-
-
 
     def integrand1(self, x, amplitude):
         return np.exp(self.tilted_periodic_potential(amplitude, x))
