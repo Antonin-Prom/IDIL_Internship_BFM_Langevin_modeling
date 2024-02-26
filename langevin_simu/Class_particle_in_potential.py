@@ -52,7 +52,7 @@ class DiffusionSimulation:
             msd.append(np.mean((traj[:-j] - traj[j:])**2))
         return np.array(msd),lag_time
     
-    def mean_square_displacement1(self, traj, time_end, time_skip):
+    def mean_square_displacement1(self, traj,time_start, time_end, time_skip):
         """Compute the mean square displacement by iterating through an array of lag times
 
         Args:
@@ -64,7 +64,7 @@ class DiffusionSimulation:
             array: The mean square displacement
             array: The lag times array    
         """
-        lag_time = np.arange(0, int(len(traj) * time_end), time_skip)
+        lag_time = np.arange(time_start, int(len(traj) * time_end), time_skip)
         msd = np.zeros(int(len(traj)*time_end/time_skip))
         for i,j in zip(range(len(lag_time)),lag_time):
             if j == 0 :
