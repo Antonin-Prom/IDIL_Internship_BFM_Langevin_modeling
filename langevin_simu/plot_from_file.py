@@ -23,14 +23,22 @@ def theory_plot():
     theo_msd = sim.theory_curve(t_arr,2)/(26*26)
     plt.loglog(t_arr,theo_msd)
 
+def linear_D(t,D,shift):
+    return 2*D*t + shift
 
 def plot_potential_no_torque(index):
-    #plt.loglog(time[index],msd[index],label= f'Simulated MSD, Einstein diffusion = {einstein_diff:.3f}')
-    #plt.fill_between(time[index], msd[index] - std[index], msd[index] + std[index], color='gray', alpha=0.3, label='standard deviation')
-    plt.xlabel('t[s]')
+    x_axis = einstein_diff*time[index]/(26*26)
+    plt.plot(x_axis,msd[index],label= f'Simulated MSD, Barrier = 2kT, Einstein diffusion = {einstein_diff:.3f}')
+    #plt.fill_between(x_axis, msd[index] - std[index], msd[index] + std[index], color='gray', alpha=0.3, label='standard deviation')
+    popt, pcov = scipy.optimize.curve_fit(linear_D, time[index], msd[index])
+    D_fit,shift = popt[0],popt[1]
+    fit = linear_D(time[index], D_fit,shift)
+    plt.plot(x_axis, fit, label= f' y = 2Dt, Fitted diffusion coefficient = {D_fit:.3f}, D_LJ = {D_eff[index]:.3f}')
+    print(popt,D_eff[index])
+    plt.xlabel('Dt/freq²')
     plt.ylabel('MSD [rad²]')
     plt.legend()
     plt.show() 
 
-theory_plot()
+plot_potential_no_torque(0)
 plt.show()
