@@ -26,17 +26,18 @@ def generate_traj_static(N=3600000,A=2,dt=1e-5):
     traj = sim.static_process( N, A)
     #np.save(f'traj_static_{N:.0f}_amplitude_{A:.0f}_dt_{dt:.1f}',traj)
     return traj
-    
+
+"""
 traj_static = np.load('traj_10000000_amplitude_2.npy',allow_pickle=True)
 traj_proceed =  np.load('traj_walrus_10000000_amplitude_2_dt_0.0.npy',allow_pickle=True)
-
+"""
 sim = DiffusionSimulation(1e-5)
 
 def run_msd_traj(traj):
     msd = sim.mean_square_displacement1(traj,0, 1/4, 100)
     return msd
 
-npts = 3600000
+npts = 36000000
 
                                                                                                                                                                        
 def run_serial(repetitions=10):
@@ -63,6 +64,12 @@ def run_parallel(repetitions=10, n_jobs=5):
     print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
     return parallel_out
 
+
+def run_parallel_msd_chunk(nb_chunks=10,traj,n_jobs=5,time_end =1/4, time_skip = 100):
+    sim = DiffusionSimulation()
+    chunks_size = int(int(len(traj) * time_end)/ nb_chunks)
+    parallel_msd = Parallel(n_jobs=n_jobs)(delayed(sim.mean_square_displacement1)( traj,time_start, time_end, time_skip) for i in range(nb_chunks))
+    return parallel_msd
 
 
 

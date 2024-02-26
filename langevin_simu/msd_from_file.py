@@ -5,7 +5,7 @@ import scipy
 from scipy.optimize import curve_fit
 
 
-einstein_diff = 0.1648
+einstein_diff = 0.164848
 
 
 data = np.load('msd_no_torque.npy',allow_pickle=True)
