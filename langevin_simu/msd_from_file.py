@@ -19,10 +19,17 @@ D_eff = loaded_dict['D_eff']
 
 def theory_plot():
     sim = DiffusionSimulation()
-    t_arr = np.arange(0,10^3,0.01)
-    theo_msd = sim.theory_curve(t_arr,2)/(26*26)
-    plt.loglog(t_arr,theo_msd)
-
+    t_arr = np.arange(36000000)*1e-4
+    theo_msd = sim.theory_curve_oscillatory(t_arr,2)/(26*26)
+    popt, pcov = scipy.optimize.curve_fit(linear_D, t_arr, theo_msd)
+    D_fit,shift = popt[0],popt[1]
+    fit = linear_D(t_arr, D_fit,shift)
+    
+    plt.loglog(t_arr,theo_msd, label = 'theory defaveri')
+    plt.plot(t_arr, fit, label= f' y = 2Dt, Fitted diffusion coefficient = {D_fit:.3f}, D_LJ = {D_eff[0]:.3f}')
+    plt.xlabel('Dt/a²')
+    plt.ylabel('MSD')
+    
 def linear_D(t,D,shift):
     return 2*D*t + shift
 
@@ -40,5 +47,5 @@ def plot_potential_no_torque(index):
     plt.legend()
     plt.show() 
 
-plot_potential_no_torque(0)
+theory_plot()
 plt.show()

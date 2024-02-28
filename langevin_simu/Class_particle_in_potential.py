@@ -64,14 +64,13 @@ class DiffusionSimulation:
             array: The mean square displacement
             array: The lag times array    
         """
-        lag_time = np.arange(time_start, int(len(traj) * time_end), time_skip)
+        lag_time = np.arange(time_start, int(len(traj) * time_end), time_skip,dtype='int16')
         msd = np.zeros(int(len(traj)*time_end/time_skip))
         for i,j in zip(range(len(lag_time)),lag_time):
             if j == 0 :
-                msd[0] = 0
                 continue
             msd[i] = (np.mean((traj[:-j] - traj[j:])**2))
-        return np.array(msd),lag_time
+        return np.array(msd)
     
 
     def tilted_periodic_potential(self, A, x):
@@ -80,7 +79,7 @@ class DiffusionSimulation:
     def potential_curvature(self, A, x):
         return -A*(self.frequency**2)*np.cos(self.frequency*x)
 
-    def static_process(self, N, A):
+    def static_process(self, N, A, xstart):
         """ Perform the overdamped rotational langevin dynamic simulation in a given potential, all units are in S.I.
 
         Args:
@@ -91,10 +90,10 @@ class DiffusionSimulation:
             array: angular trajectory
         """
         A *= self.k_b * self.T_K
-        x = 0
+        x = xstart
         stored_position = np.zeros(N)
         w = self.generate_seq(N)
-        for i in np.arange(0, N):
+        for i in np.arange(0, N, dtype='int16'):
             dx = -(1 / self.rotational_drag) * self.dt_s * ((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x-self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
             x = np.mod(x + dx, 2 * np.pi)
             stored_position[i] = x
@@ -187,14 +186,28 @@ class DiffusionSimulation:
     MSD
     """
 
-    def theory_curve(self,time,A):
+    def theory_curve_oscillatory(self,time,A):
         D_eff = self.lifson_jackson_noforce(A)
         msd = []
         for t in time :
             def integrand_msd(y):
                 return y*y*np.exp(-self.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)   
-            msd_coef =  quad(integrand_msd, -np.inf,np.inf)[0]
-            msd.append(msd_coef)
+            lower_limit = -np.inf
+            upper_limit = np.inf
+            result, error = quad(integrand_msd, lower_limit, upper_limit)
+            msd.append(t*result)
+        return np.array(msd)
+    
+    def theory_curve_final(self,time,A):
+        D_eff = self.lifson_jackson_noforce(A)
+        msd = []
+        for t in time :
+            def integrand_msd(y):
+                return y*y*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)
+            lower_limit = -np.inf
+            upper_limit = np.inf
+            result, error = quad(integrand_msd, lower_limit, upper_limit)
+            msd.append(result*t*np.sqrt(self.rotational_einstein_diff/D_eff))
         return np.array(msd)
         
     """

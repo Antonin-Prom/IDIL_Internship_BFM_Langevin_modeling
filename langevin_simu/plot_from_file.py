@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 einstein_diff = 0.1648
 
 
-data = np.load('msd_no_torque.npy',allow_pickle=True)
+data = np.load('traj_10000000_amplitude_2.npy',allow_pickle=True)
 loaded_dict = data[()]
 time = loaded_dict['time']
 std = loaded_dict['std']
