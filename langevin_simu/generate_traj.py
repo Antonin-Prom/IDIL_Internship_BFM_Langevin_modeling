@@ -64,7 +64,7 @@ def run_parallel(repetitions=10, n_jobs=5):
     np.save(f'trajectories_static_{npts:.0f}_amplitude_2kT_dt_10^-4',parallel_out)
     return parallel_out
 
-#trajectories = np.load('trajectories_static_100000000_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
+trajectories = np.load('trajectories_static_100000000_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
 
 def calculate_msd_chunk(i, nb_chunks=10, time_end=1/4, traj=None,time_skip=None):
     max_lagtime = int(len(traj) * time_end)
@@ -86,21 +86,25 @@ def run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000,
     print(f'run_msd_parallel(): Parallel done in {time.time() - t0:.1f} s')
     final_msd = np.concatenate(msd_results)
 
-    np.save(f'msd_test_chunk_trajectories_static_amplitude_2kT_dt_10^-4', final_msd)
+    np.save(f'msd_traj0_100000000_tskip1000_end4_amplitude_2kT_dt_10^-4', final_msd)
     return final_msd
 
+"""
 # Load trajectories and set other parameters
-#trajectories = np.load('traj_walrus_36000000_amplitude_2kT_dt_1e-4.npy', allow_pickle=True)
-#traj = trajectories[0]
+trajectories = np.load('trajectories_static_100000000_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
+traj = trajectories[0]
 
 # Run the parallel MSD calculation
-#run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, traj=traj)
+run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, traj=traj)
+"""
+
 def linear_D(t,D,shift):
     return 2*D*t + shift
 
+
 simu1 = DiffusionSimulation(frequency = 26,torque  = 0 )
 D_LJ = simu1.lifson_jackson_noforce(2)
-msd_test = np.load('msd_test_chunk_trajectories_static_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
+msd_test = np.load('msd_traj0_100000000_tskip1000_end4_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
 time_array = np.arange(len(msd_test))*0.1*0.1648/(26*26)
 
 popt, pcov = scipy.optimize.curve_fit(linear_D, time_array, msd_test)
@@ -111,6 +115,13 @@ plt.xlabel('Dt/a²')
 plt.ylabel('MSD')
 plt.legend()
 plt.show()
+
+t_arr = np.logspace(0.001,3,1000)*0.1*0.1648/(26*26)
+theo_msd = simu1.theory_curve_oscillatory(t_arr,2)
+plt.loglog(t_arr,theo_msd, label = 'theory_MSD for 2kT, 26 periodic potential')
+plt.loglog(time_array,msd_test, label = 'MSD for 2kT, 26 periodic potential')
+plt.legend()
+
 
 
 

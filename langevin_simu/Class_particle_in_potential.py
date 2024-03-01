@@ -192,23 +192,30 @@ class DiffusionSimulation:
         for t in time :
             def integrand_msd(y):
                 return y*y*np.exp(-self.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)   
-            lower_limit = -np.inf
-            upper_limit = np.inf
+            lower_limit = -5
+            upper_limit = 5
             result, error = quad(integrand_msd, lower_limit, upper_limit)
             msd.append(t*result)
         return np.array(msd)
+
     
-    def theory_curve_final(self,time,A):
+    def theory_curve_oscillatory_monte_carlo(self,time,A):
         D_eff = self.lifson_jackson_noforce(A)
         msd = []
         for t in time :
             def integrand_msd(y):
-                return y*y*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)
-            lower_limit = -np.inf
-            upper_limit = np.inf
-            result, error = quad(integrand_msd, lower_limit, upper_limit)
-            msd.append(result*t*np.sqrt(self.rotational_einstein_diff/D_eff))
+                return y*y*np.exp(-self.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)   
+            num_samples = 10000  # Adjust as needed
+            samples = np.random.uniform(100000, 100000, size=num_samples)
+            weights = integrand_msd(samples)
+            result = np.mean(weights) * (100000 - (-100000)) / num_samples
+            msd.append(t * result)
         return np.array(msd)
+
+
+
+
+
         
     """
     Lifson and Jackson methods
