@@ -101,18 +101,19 @@ run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, tra
 def linear_D(t,D,shift):
     return 2*D*t + shift
 
-
+aa = (2*np.pi/26)**2
 simu1 = DiffusionSimulation(frequency = 26,torque  = 0 )
 D_LJ = simu1.lifson_jackson_noforce(2)
 msd_test = np.load('msd_traj0_100000000_tskip1000_end4_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
-time_array = np.arange(len(msd_test))*0.1*0.1648/(26*26)
+time_array = np.arange(len(msd_test))*0.1*0.1648/aa
 
 popt, pcov = scipy.optimize.curve_fit(linear_D, time_array, msd_test)
 D_fit,shift = popt[0],popt[1]
 plt.plot(time_array, 2*D_fit * time_array + shift , label = f'Linear fit, D_fit = {D_fit:.3f}, L&J coef =  {D_LJ:.3f} ')
-plt.plot(time_array,msd_test, label = 'MSD for 2kT, 26 periodic potential')
+
+plt.loglog(time_array,msd_test/aa, label = 'MSD for 2kT, 26 periodic potential')
 plt.xlabel('Dt/a²')
-plt.ylabel('MSD')
+plt.ylabel('<x²>/a²')
 plt.legend()
 plt.show()
 
@@ -121,8 +122,6 @@ theo_msd = simu1.theory_curve_oscillatory(t_arr,2)
 plt.loglog(t_arr,theo_msd, label = 'theory_MSD for 2kT, 26 periodic potential')
 plt.loglog(time_array,msd_test, label = 'MSD for 2kT, 26 periodic potential')
 plt.legend()
-
-
 
 
 

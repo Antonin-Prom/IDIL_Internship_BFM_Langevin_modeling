@@ -93,13 +93,22 @@ def theory_curve_oscillatory_single(t,A):
     msd = t*integ
     return msd
 
+
 def plot_integral_theory():
-    K = 0.1648/(26*26)
-    time_dta = np.logspace(-1,7,400)*K
-    A = 6
+    aa = (2*np.pi/26)**2
+    K = 0.1648/(aa)
+    time_dta = np.logspace(-4,7,400)*K
+    A = 1
     msd = theory_curve_oscillatory(time_dta,A)
-    plt.loglog(time_dta,msd/(26*26))
- 
+    plt.xlim(0.001,1000)
+    plt.ylim(0.001,50)
+    plt.loglog(time_dta,msd/aa,label = 'V_0/kT = 2')
+    plt.xlabel('Dt/a²')
+    plt.ylabel('<x²>/a²')
+    
+    params, covariance = curve_fit(linear_D, time_dta, msd)
+    D = params[0]
+    plt.plot(time_dta,linear_D(time_dta, params[0], params[1]),label = f'fit, {D:.5f}')
     
 def plot_integrand(t,A):
     y = np.linspace(-2,2,1000000)
@@ -109,6 +118,10 @@ def plot_integrand(t,A):
     plt.title(f'integrand at time {t:}s, amplitude = 6kT')
 
 plot_integral_theory()
- 
+
+
+plt.legend()
+
+
 print(msd)
 plt.show()
