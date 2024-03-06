@@ -16,8 +16,8 @@ def convert_time_axis(Dt_a,dt):
     
 
 def generate_traj(N,A,dt):
-    sim = DiffusionSimulation(dt)
-    traj = sim.static_process( N, A)
+    sim = DiffusionSimulation(dt = dt)
+    traj = sim.main_traj( N, A)
     #np.save(f'traj_walrus_{N:.0f}_amplitude_{A:.0f}_dt_{dt:.1f}',traj)
     return traj
 
@@ -59,12 +59,12 @@ def run_parallel(repetitions=10, n_jobs=5):
     # Parallel:
     print(f'run_serial_parallel(): Parallel working...')
     t0 = time.time()
-    parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj_static)(N = npts,A = 2 , dt = 1e-4) for i in range(repetitions))
+    parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj)(N = npts,A = 5 , dt = 1e-4) for i in range(repetitions))
     print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-    np.save(f'trajectories_static_{npts:.0f}_amplitude_2kT_dt_10^-4',parallel_out)
+    np.save(f'trajectories_{npts:.0f}points_amplitude_5kT_dt_10^-4',parallel_out)
     return parallel_out
 
-trajectories = np.load('trajectories_static_100000000_amplitude_2kT_dt_10^-4.npy',allow_pickle=True)
+#trajectories = np.load(f'trajectories_{npts:.0f}points_amplitude_5kT_dt_10^-4.npy',allow_pickle=True)
 
 def calculate_msd_chunk(i, nb_chunks=10, time_end=1/4, traj=None,time_skip=None):
     max_lagtime = int(len(traj) * time_end)
@@ -86,7 +86,7 @@ def run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000,
     print(f'run_msd_parallel(): Parallel done in {time.time() - t0:.1f} s')
     final_msd = np.concatenate(msd_results)
 
-    np.save(f'msd_traj0_100000000_tskip1000_end4_amplitude_2kT_dt_10^-4', final_msd)
+    np.save(f'msd_traj0_100000000_tskip1000_end4_amplitude_5kT_dt_10^-4', final_msd)
     return final_msd
 
 """
@@ -98,6 +98,7 @@ traj = trajectories[0]
 run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, traj=traj)
 """
 
+"""
 def linear_D(t,D,shift):
     return 2*D*t + shift
 
@@ -122,6 +123,4 @@ theo_msd = simu1.theory_curve_oscillatory(t_arr,2)
 plt.loglog(t_arr,theo_msd, label = 'theory_MSD for 2kT, 26 periodic potential')
 plt.loglog(time_array,msd_test, label = 'MSD for 2kT, 26 periodic potential')
 plt.legend()
-
-
-
+"""

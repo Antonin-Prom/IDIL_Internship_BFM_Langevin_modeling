@@ -31,7 +31,37 @@ class DiffusionSimulation:
         W_seq = np.random.normal(0, standard_deviation, N)
         return W_seq
 
-    def mean_square_displacement(self, traj, time_end, time_skip):
+
+    
+
+    
+
+    def tilted_periodic_potential(self, A, x):
+        return self.torque*x + A * np.cos(x * self.frequency)
+    
+    def potential_curvature(self, A, x):
+        return -A*(self.frequency**2)*np.cos(self.frequency*x)
+
+    
+    def main_traj(self, N, A):
+        """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
+
+        Args:
+            N (int): trajectory length
+            A (float): barrier amplitude 
+
+        Returns:
+            array: angular trajectory
+        """
+        w = self.generate_seq(N)
+        A *= self.k_b * self.T_K
+        x = 0
+        positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x-self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
+        positions = np.mod(positions,2*np.pi)
+        return np.array(positions)    
+    
+    
+    def mean_square_displacement_list(self, traj, time_end, time_skip):
         """Compute the mean square displacement by iterating through an array of lag times
 
         Args:
@@ -50,9 +80,9 @@ class DiffusionSimulation:
                 msd.append(0)
                 continue
             msd.append(np.mean((traj[:-j] - traj[j:])**2))
-        return np.array(msd),lag_time
+        return np.array(msd),lag_time    
     
-    def mean_square_displacement1(self, traj,time_start, time_end, time_skip):
+    def mean_square_displacement_arraylike(self, traj,time_start, time_end, time_skip):
         """Compute the mean square displacement by iterating through an array of lag times
 
         Args:
@@ -70,51 +100,8 @@ class DiffusionSimulation:
             if j == 0 :
                 continue
             msd[i] = (np.mean((traj[:-j] - traj[j:])**2))
-        return np.array(msd)
+        return np.array(msd)    
     
-
-    def tilted_periodic_potential(self, A, x):
-        return self.torque*x + A * np.cos(x * self.frequency)
-    
-    def potential_curvature(self, A, x):
-        return -A*(self.frequency**2)*np.cos(self.frequency*x)
-
-    def static_process(self, N, A, xstart):
-        """ Perform the overdamped rotational langevin dynamic simulation in a given potential, all units are in S.I.
-
-        Args:
-            N (int): trajectory length
-            A (float): barrier amplitude 
-
-        Returns:
-            array: angular trajectory
-        """
-        A *= self.k_b * self.T_K
-        x = xstart
-        stored_position = np.zeros(N)
-        w = self.generate_seq(N)
-        for i in np.arange(0, N, dtype='int16'):
-            dx = -(1 / self.rotational_drag) * self.dt_s * ((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x-self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]
-            x = np.mod(x + dx, 2 * np.pi)
-            stored_position[i] = x
-        return stored_position
-
-
-    def proceed_traj1(self, N, A):
-        """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
-
-        Args:
-            N (int): trajectory length
-            A (float): barrier amplitude 
-
-        Returns:
-            array: angular trajectory
-        """
-        w = self.generate_seq(N)
-        A *= self.k_b * self.T_K
-        x = 0
-        positions = [ x := np.mod((x - (1 / self.rotational_drag) * self.dt_s * (self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x)) / self.space_step + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]),2*np.pi) for i in range(N)]
-        return np.array(positions)    
     
     def msd_in_matrix(self, W, N, amplitude,time_end,time_skip):
         """ Compute multiple trajectories than perform mean square displacement and return it in a matrix
@@ -123,7 +110,7 @@ class DiffusionSimulation:
             W (float): Number of msd to compute.
             N (_type_): Number of trajectory points.
             amplitude (float): Barrier amplitude.
-            time_end (float): The iterated fraction of the trajectory length.
+            time_end (float): The iterated fraction of the trajectory length. 
             time_skip (int): Quantity of points skiped when performing msd.
 
         Returns:
@@ -131,8 +118,8 @@ class DiffusionSimulation:
         """
         msd_matrix = []
         for j in range(W):
-            traj = np.unwrap(self.static_process(N, amplitude ))
-            interm,_ = self.mean_square_displacement(traj,time_end,time_skip)
+            traj = np.unwrap(self.main_traj(N, amplitude ))
+            interm,_ = self.mean_square_displacement_list(traj,time_end,time_skip)
             msd_matrix.append(interm)
         return msd_matrix
         
@@ -197,6 +184,8 @@ class DiffusionSimulation:
             result, error = quad(integrand_msd, lower_limit, upper_limit)
             msd.append(t*result)
         return np.array(msd)
+    
+
 
     
     def theory_curve_oscillatory_monte_carlo(self,time,A):
