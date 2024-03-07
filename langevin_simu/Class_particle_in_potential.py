@@ -175,16 +175,18 @@ class DiffusionSimulation:
 
     def theory_curve_oscillatory(self,time,A):
         D_eff = self.lifson_jackson_noforce(A)
+        print(D_eff)
         msd = []
         for t in time :
             def integrand_msd(y):
                 return y*y*np.exp(-self.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)   
-            lower_limit = -5
-            upper_limit = 5
-            result, error = quad(integrand_msd, lower_limit, upper_limit)
+            lower_limit = -2
+            upper_limit = 2
+            result, error = quad(integrand_msd, lower_limit, upper_limit,epsabs=1e-9, epsrel=1e-9)
             msd.append(t*result)
         return np.array(msd)
     
+
 
 
     
