@@ -211,11 +211,13 @@ def theory_curve_oscillatory(time,A):
         msd.append(t*result)
     return np.array(msd)
 
-def mean_msd():
+def give_mean_msd():
     msd_list = []
     for i in range(0,10):
         msd_list.append(np.load(f'logmsd_traj{i:.0f}_end4_amplitude_5kT_dt_10^-4.npy'))
-    return np.mean(msd_list,axis=0)
+    averaged_msd = np.mean(msd_list,axis=0)
+    np.save('mean_msd_1st_trajs',averaged_msd)
+    return averaged_msd
 
 """
 for i in range(0,10):
