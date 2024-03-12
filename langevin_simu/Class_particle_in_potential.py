@@ -182,7 +182,7 @@ class DiffusionSimulation:
                 return y*y*np.exp(-self.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*self.rotational_einstein_diff)   
             lower_limit = -2
             upper_limit = 2
-            result, error = quad(integrand_msd, lower_limit, upper_limit,epsabs=1e-9, epsrel=1e-9)
+            result, error = quad(integrand_msd, lower_limit, upper_limit,epsabs=1e-6, epsrel=1e-5)
             msd.append(t*result)
         return np.array(msd)
     

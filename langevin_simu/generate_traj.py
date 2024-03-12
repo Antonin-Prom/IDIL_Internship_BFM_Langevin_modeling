@@ -40,16 +40,16 @@ def run_msd_traj(traj):
 npts = int(1e8)
                                                                                                                                                                        
 
-def run_parallel(repetitions=10, n_jobs=5):
+def run_parallel(repetitions=10, n_jobs=5, Amplitude = None,dt=None):
     ''' parallel computations of long_loop() 
         parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
     '''
     # Parallel:
     print(f'run_serial_parallel(): Parallel working...')
     t0 = time.time()
-    parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj)(N = npts,A = 5 , dt = 1e-4) for i in range(repetitions))
+    parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj)(N = npts,A = Amplitude , dt = dt) for i in range(repetitions))
     print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-    np.save(f'trajectories_{npts:.0f}points_amplitude_5kT_dt_10^-4',parallel_out)
+    np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_10^-5',parallel_out)
     return parallel_out
 
 #trajectories = np.load(f'trajectories_{npts:.0f}points_amplitude_5kT_dt_10^-4.npy',allow_pickle=True)
@@ -84,10 +84,45 @@ def calculate_msd_chunk_linear(i, nb_chunks=10, time_end=1/4, traj=None,time_ski
     if i == nb_chunks - 1:
         current_max = max_lagtime
     previous_max = maxchunk_list[i - 1]
+    msd_chunk = [np.mean((traj[:-lag] - traj[lag:]) ** 2) for lag in range(max(1,previous_max), current_max,time_skip*i/2 + 1)]
+    return msd_chunk
+
+def calculate_msd_chunk_linear2(i, nb_chunks=10, time_end=1/4, traj= None,time_skip=None,nb_skip_first_chunk = None):
+    """
+
+    Parameters
+    ----------
+    i : int
+        iterator.
+    nb_chunks : int
+        Number of chunks in which the lag time is divided. The default is 10.
+    time_end : float
+        Fraction of the trajectory length on which MSD is runned. The default is 1/4.
+    traj : array, 
+        The angular trajectory
+    time_skip : int
+        Number of lag time skipped when calculating MSD
+
+    Returns
+    -------
+    msd_chunk : array
+        chunk of MSD for a given lag time slice
+
+    """
+    max_lagtime = int(len(traj) * time_end)
+    chunks_size = int(max_lagtime / nb_chunks)
+    maxchunk_list = [chunks_size * i for i in range(0, nb_chunks)]
+    traj = np.unwrap(traj)
+    current_max = maxchunk_list[i]
+    if i == nb_chunks - 1:
+        current_max = max_lagtime
+    previous_max = maxchunk_list[i - 1]
+    if i == 1:
+        time_skip = nb_skip_first_chunk
     msd_chunk = [np.mean((traj[:-lag] - traj[lag:]) ** 2) for lag in range(max(1,previous_max), current_max,time_skip)]
     return msd_chunk
 
-def run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, traj=None,n=None):
+def run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, traj= None ,n=int,nb_skip_first_chunk = 10):
     """
     
 
@@ -114,11 +149,11 @@ def run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000,
     """
     print(f'run_msd_parallel(): Parallel working...')
     t0 = time.time()
-    msd_results = Parallel(n_jobs=n_jobs)(delayed(calculate_msd_chunk_linear)(i, nb_chunks=nb_chunks, time_end=time_end, traj=traj,time_skip = time_skip) for i in range(1, nb_chunks-1))
+    msd_results = Parallel(n_jobs=n_jobs)(delayed(calculate_msd_chunk_linear2)(i, nb_chunks=nb_chunks, time_end=time_end, traj=traj,time_skip = time_skip,nb_skip_first_chunk=nb_skip_first_chunk) for i in range(1, nb_chunks-1))
     print(f'run_msd_parallel(): Parallel done in {time.time() - t0:.1f} s')
     final_msd = np.concatenate(msd_results)
 
-    np.save(f'traj{n:.0f}_msd_traj0_100000000_tskip1000_end4_amplitude_5kT_dt_10^-4', final_msd)
+    np.save(f'traj{n:.0f}_msdlin2_tskip1000_end4_amplitude_5kT_dt_10^-4', final_msd)
     return final_msd
 
 def calculate_msd_chunk_log(current_chunk, nb_chunks=10, time_end=1/4, traj= None, msd_nbpt = None):
@@ -145,7 +180,7 @@ def run_parallel_msd_chunk_log(nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 
     print(f'run_msd_parallel(): Parallel done in {time.time() - t0:.1f} s')
     final_msd = np.concatenate(msd_results)
 
-    np.save(f'traj{n:.0f}_msd_traj0_100000000_tskip1000_end4_amplitude_5kT_dt_10^-4', final_msd)
+    np.save(f'logmsd_traj{n:.0f}_end4_amplitude_5kT_dt_10^-4', final_msd)
     return final_msd
 
 
@@ -162,18 +197,35 @@ run_parallel_msd_chunk(nb_chunks=10, n_jobs=5, time_end=1/4, time_skip=1000, tra
 def linear_D(t,D,shift):
     return 2*D*t + shift
 
-aa = 1 #(2*np.pi/26)**2
-simu1 = DiffusionSimulation(frequency = 26,torque  = 0 )
-D_LJ = simu1.lifson_jackson_noforce(5)
-msd_test = np.load('msd_traj0_100000000_tskip1000_end4_amplitude_5kT_dt_10^-4.npy',allow_pickle=True)
-time_array = np.arange(len(msd_test))*0.1#*0.1648/aa
+def theory_curve_oscillatory(time,A):
+    simu1 = DiffusionSimulation(dt = 1e-4)
+    D_eff = simu1.lifson_jackson_noforce(A)
+    print(D_eff)
+    msd = []
+    for t in time :
+        def integrand_msd(y):
+            return y*y*np.exp(-simu1.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_eff))/np.sqrt(4*np.pi*simu1.rotational_einstein_diff)   
+        lower_limit = -5
+        upper_limit = 5
+        result, error = quad(integrand_msd, lower_limit, upper_limit,epsabs=1e-8, epsrel=1e-8)
+        msd.append(t*result)
+    return np.array(msd)
+
+def mean_msd():
+    msd_list = []
+    for i in range(0,10):
+        msd_list.append(np.load(f'logmsd_traj{i:.0f}_end4_amplitude_5kT_dt_10^-4.npy'))
+    return np.mean(msd_list,axis=0)
+
 """
-max_lagtime = int(len(traj) * 1/4)
-t = logpsace(0.1,log10(max_lagtime),len(msd42))*1e-4
-t_arr = 
-plot(t,msd0)
-plot(t,msd42)
+for i in range(0,10):
+    trajectories = np.load('trajectories_100000000points_amplitude_5kT_dt_10^-4.npy',allow_pickle=True)
+    run_parallel_msd_chunk_log(nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, traj=trajectories[i],n=i)
 """
+    
+    
+    #(f'logmsd_traj{i:.0f)_end4_amplitude_5kT_dt_10^-4.npy)
+    
 
 """
 popt, pcov = scipy.optimize.curve_fit(linear_D, time_array, msd_test)
@@ -196,10 +248,36 @@ plt.loglog(time_array,msd_test, label = 'MSD for 5kT, 26 periodic potential')
 plt.loglog(t_arr, linear_D(t_arr,D_LJ,0), label = f'L&J 2D*t, D* = {D_LJ:.5f}')
 plt.xlim(1,10**3)
 
-plt.loglog(t,msd42,label = 'Simulated MSD for 5kT, 26 periodic potential')
-#theo_msd = simu1.theory_curve_oscillatory(t,10)
-#plt.loglog(t,theo_msd, label = 'theory_MSD for 5kT, 26 periodic potential')
-plt.xlabel('t[s]')
-plt.ylabel('<x²> [rad²]')
+msd0 = np.load('traj1_msd_traj0_100000000_tskip1000_end4_amplitude_5kT_dt_10^-4.npy')
+msd42 = np.load('traj42_msd_traj0_100000000_tskip1000_end4_amplitude_5kT_dt_10^-4.npy')
+t42 = np.logspace(0,log10(25000000*1e-4),len(msd42))
+t0 = np.arange(0,len(msd0))*0.1
+theo_msd_42_err5 = theory_curve_oscillatory(t42,5)
+
+fig, ax = plt.subplots(figsize = (9, 6))
+ax.scatter(t42, msd42, s=0.5, label = 'Simulated MSD for 5kT, 26 periodic potential')
+ax.scatter(t42, theo_msd, s=0.5, label = 'Simulated MSD for 5kT, 26 periodic potential')
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlabel('t[s]')
+ax.set_ylabel('<x²> [rad²]')
 plt.legend()
+
+
+
+
+theo_msd_5 = theory_curve_oscillatory(t0,5)
+fig, ax = plt.subplots(figsize = (9, 6))
+ax.scatter(t0, uni_mean, s=0.5, label = 'Simulated MSD_mean10 for 5kT')
+ax.scatter(t0, theo_msd_5, s=0.5, label = 'Theoretical MSD for 5kT,')
+ax.scatter(t0,linear_D(t0,0.0002221,0), s=0.5 label = '2d*t')
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlabel('t[s]')
+ax.set_ylabel('<x²> [rad²]')
+plt.legend()
+
+
+
+
 """
