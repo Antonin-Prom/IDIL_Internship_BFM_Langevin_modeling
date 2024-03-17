@@ -18,7 +18,7 @@ def convert_time_axis(Dt_a,dt):
 def generate_traj(N,A,dt):
     sim = DiffusionSimulation(dt = dt)
     traj = sim.main_traj( N, A)
-    #np.save(f'traj_walrus_{N:.0f}_amplitude_{A:.0f}_dt_{dt:.1f}',traj)
+    traj = traj.astype(np.float32)
     return traj
 
 def generate_traj_static(N=3600000,A=2,dt=1e-5):
@@ -49,7 +49,7 @@ def run_parallel(repetitions=10, n_jobs=5, Amplitude = None,dt=None):
     t0 = time.time()
     parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj)(N = npts,A = Amplitude , dt = dt) for i in range(repetitions))
     print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-    np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_10^-5',parallel_out)
+    np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_{dt}',parallel_out)
     return parallel_out
 
 #trajectories = np.load(f'trajectories_{npts:.0f}points_amplitude_5kT_dt_10^-4.npy',allow_pickle=True)
@@ -167,7 +167,7 @@ def run_parallel_msd_chunk_log(nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 
     
     traj = np.unwrap(traj)    
     max_lagtime = int(len(traj) * time_end)
-    total_lag_time = [int(lag) for lag in (np.logspace(0.1,int(np.log10(max_lagtime)),msd_nbpt))]
+    total_lag_time = np.unique([int(lag) for lag in (np.logspace(0,int(np.log10(max_lagtime)),msd_nbpt))])
     chunks_size = int(len(total_lag_time) / nb_chunks)
     chunk_list = []
   
@@ -180,9 +180,14 @@ def run_parallel_msd_chunk_log(nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 
     print(f'run_msd_parallel(): Parallel done in {time.time() - t0:.1f} s')
     final_msd = np.concatenate(msd_results)
 
-    np.save(f'logmsd_traj{n:.0f}_end4_amplitude_5kT_dt_10^-4', final_msd)
+    np.save(f'{n}', final_msd)
     return final_msd
 
+def load_and_logmsd(name = None,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000):
+    trajs = np.load(f'{name}.npy')
+    for i in range(len(trajs)):
+        run_parallel_msd_chunk_log(nb_chunks=nb_chunks, n_jobs=n_jobs, time_end=time_end, msd_nbpt = msd_nbpt, traj=trajs[i],n= f'logmsd{name},num_{i:.0f}')
+    
 
 """
 # Load trajectories and set other parameters
@@ -211,11 +216,13 @@ def theory_curve_oscillatory(time,A):
         msd.append(t*result)
     return np.array(msd)
 
-def mean_msd():
+def give_mean_msd():
     msd_list = []
     for i in range(0,10):
         msd_list.append(np.load(f'logmsd_traj{i:.0f}_end4_amplitude_5kT_dt_10^-4.npy'))
-    return np.mean(msd_list,axis=0)
+    averaged_msd = np.mean(msd_list,axis=0)
+    np.save('mean_msd_1st_trajs',averaged_msd)
+    return averaged_msd
 
 """
 for i in range(0,10):
@@ -268,9 +275,10 @@ plt.legend()
 
 theo_msd_5 = theory_curve_oscillatory(t0,5)
 fig, ax = plt.subplots(figsize = (9, 6))
-ax.scatter(t0, uni_mean, s=0.5, label = 'Simulated MSD_mean10 for 5kT')
+t0 = np.logspace(0,log10(25000000*1e-4),len(msd0))
+ax.scatter(t0, msd0, s=0.5, label = 'Simulated MSD_mean10 for 5kT')
 ax.scatter(t0, theo_msd_5, s=0.5, label = 'Theoretical MSD for 5kT,')
-ax.scatter(t0,linear_D(t0,0.0002221,0), s=0.5 label = '2d*t')
+ax.scatter(t0,linear_D(t0,0.0002221,0), s=0.5, label = '2d*t')
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel('t[s]')

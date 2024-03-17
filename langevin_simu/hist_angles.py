@@ -16,9 +16,18 @@ def generate_mean_traj(N,L,A,torque):
     mean_traj = np.mean(traj_matrix,axis=0)
     return mean_traj
 
-mean_traj = generate_mean_traj(1,1000000,3,100)
-plt.hist(mean_traj,bins = 2600,density=True)
-plt.xlabel('angle [rad]')
-plt.ylabel('density')
-plt.show()
+#mean_traj = generate_mean_traj(1,1000000,3,100)
+
+
+def get_trajs(amplitude,dt):
+    trajs = np.load(f'trajectories_100000000points_amplitude_{amplitude}kT_dt_{dt}.npy')
+    return trajs
+
+def plot_hist(amplitude,dt,i):
+    trajs = get_trajs(amplitude,dt)
+    traj = trajs[i]
+    plt.hist(traj,bins = 2600,density=True)
+    plt.xlabel('angle [rad]')
+    plt.ylabel('density')
+    plt.show()
 
