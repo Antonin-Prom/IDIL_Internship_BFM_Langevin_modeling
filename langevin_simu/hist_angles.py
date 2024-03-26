@@ -20,8 +20,14 @@ def generate_mean_traj(N,L,A,torque):
 
 
 def get_trajs(amplitude,dt):
-    trajs = np.load(f'trajectories_100000000points_amplitude_{amplitude}kT_dt_{dt}.npy')
+    trajs = np.load(f'trajectories_1000000points_amplitude_{amplitude}kT_dt_{dt}_torque_0.npy')                  
     return trajs
+
+def hist_at_t(amplitude,dt,t):
+    trajs = get_trajs(amplitude,dt)
+    matrix_t = [trajs[i][t]  for i in range(len(trajs))]
+    return matrix_t
+
 
 def plot_hist(amplitude,dt,i):
     trajs = get_trajs(amplitude,dt)
@@ -31,3 +37,8 @@ def plot_hist(amplitude,dt,i):
     plt.ylabel('density')
     plt.show()
 
+plt.hist(matrix_t,bins = 10000,density=True)
+plt.title('Histogram of positions at t=0 over 10000 realisations')
+plt.xlabel('angle [rad]')
+plt.ylabel('density')
+plt.show()

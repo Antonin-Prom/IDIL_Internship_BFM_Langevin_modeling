@@ -113,21 +113,21 @@ class DiffusionSimulation2:
         max_lagtime = int(len(traj) * time_end)
         total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
         
-        def find_div_nb_chunk():
+        def find_div_nb_chunk(total_lag_time):
             count = len(total_lag_time)
             while count%nb_chunks != 0:
                 count = count - 1
             return count
         
-        greatest_div = find_div_nb_chunk()
+        greatest_div = find_div_nb_chunk(total_lag_time)
         chunks_size = int((greatest_div) / nb_chunks)
         chunk_list = []
          
       
-        for j in range(nb_chunks-1):
+        for j in range(nb_chunks+1):
             chunk_list.append(total_lag_time[int(j*chunks_size):int((j+1)*chunks_size)])
-            if j == nb_chunks-1:
-                chunk_list.append(total_lag_time[int(j*chunks_size):])
+            if j == nb_chunks:
+                chunk_list.append(total_lag_time[int(j*chunks_size):-len(total_lag_time)%nb_chunks])
         
         msd_results = Parallel(n_jobs=n_jobs)(delayed(self.calculate_msd_chunk_log)(
             current_chunk, nb_chunks=nb_chunks, time_end=time_end, traj=traj, msd_nbpt=None
@@ -192,28 +192,28 @@ class DiffusionSimulation2:
         
         return [msd,msd_parallel_no_chunk, msd_chunk],[std,std_parallel_no_chunk,std_chunk]
     
-
-
+    def compare_and_plot_msd_method(self, N ):
+        time_end = 1/4
+        time_skip = 100
+        
+        def free_diffusion_linear(t):
+            return(2*part.rotational_einstein_diff*t)
+        
+        [msd,msd_parallel_no_chunk,msd_chunk],[std,std_parallel_no_chunk,std_chunk] = part.compare_msd(N)
+        
+        fig, ax = plt.subplots(figsize = (9, 6))
+        t = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(int(N*time_end))), 2000))])*1e-5
+        t_linear = np.arange(0, int(N * time_end), time_skip)*1e-5
+        ax.plot(t_linear,msd,label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = regular_linear_msd')
+        ax.fill_between(t_linear,msd - std,msd + std, color='lightgreen', alpha=0.3)
+        ax.plot(t, msd_parallel_no_chunk, label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = parallel_no_chunk')
+        ax.fill_between(t, msd_parallel_no_chunk - std_parallel_no_chunk, msd_parallel_no_chunk + std_parallel_no_chunk, color='lightblue', alpha=0.3)
+        ax.scatter(t, msd_chunk, s=1, label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = parallel_with_chunk')
+        ax.fill_between(t, msd_chunk - std_chunk, msd_chunk + std_chunk, color='grey', alpha=0.3)
+        
+        ax.plot(t,free_diffusion_linear(t), color = 'red', label = '2Dt')
+        ax.set_xlabel('t[s]')
+        ax.set_ylabel('<x²> [rad²]')
+        plt.legend()
+        
 part = DiffusionSimulation2(dt = 1e-5, frequency=0)
-time_end = 1/4
-time_skip = 100
-N = int(1e5)
-def free_diffusion_linear(t):
-    return(2*part.rotational_einstein_diff*t)
-#t,msd= part.load_and_mean_logmsd(msd_file_name ='logmsdtrajectories_10000000points_amplitude_0kT_dt_1e-05_torque_0',nb_files=10, traj_len = 10000000, time_end = 1/4)
-[msd,msd_parallel_no_chunk,msd_chunk],[std,std_parallel_no_chunk,std_chunk] = part.compare_msd(N)
-fig, ax = plt.subplots(figsize = (9, 6))
-t = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(int(N*time_end))), 2000))])*1e-5
-t_linear = np.arange(0, int(N * time_end), time_skip)*1e-5
-ax.plot(t_linear,msd,label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = regular_linear_msd')
-ax.fill_between(t_linear,msd - std,msd + std, color='lightgreen', alpha=0.3)
-ax.plot(t, msd_parallel_no_chunk, label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = parallel_no_chunk')
-ax.fill_between(t, msd_parallel_no_chunk - std_parallel_no_chunk, msd_parallel_no_chunk + std_parallel_no_chunk, color='lightblue', alpha=0.3)
-ax.scatter(t, msd_chunk, s=1, label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = parallel_with_chunk')
-ax.fill_between(t, msd_chunk - std_chunk, msd_chunk + std_chunk, color='lightblue', alpha=0.3)
-
-ax.plot(t,free_diffusion_linear(t), color = 'red', label = '2Dt')
-ax.set_xlabel('t[s]')
-ax.set_ylabel('<x²> [rad²]')
-plt.legend()
-

@@ -63,7 +63,7 @@ class DiffusionSimulation2:
         position.astype(np.float32)
         return position
     
-    def mean_square_displacement_list(self, traj = None, time_end = 1/4, time_skip = 100):
+    def regular_linear_msd(self, traj = None, time_end = 1/4, time_skip = 100):
         """Compute the mean square displacement by iterating through an array of lag times
 
         Args:
@@ -105,12 +105,23 @@ class DiffusionSimulation2:
     def run_parallel_msd_chunk_log(self, nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, traj=None,n=1234):
         
         max_lagtime = int(len(traj) * time_end)
-        total_lag_time = np.unique([int(lag) for lag in (np.logspace(0,int(np.log10(max_lagtime)),msd_nbpt))])
-        chunks_size = int(len(total_lag_time) / nb_chunks)
+        total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
+        
+        def find_div_nb_chunk(total_lag_time):
+            count = len(total_lag_time)
+            while count%nb_chunks != 0:
+                count = count - 1
+            return count
+        
+        greatest_div = find_div_nb_chunk(total_lag_time)
+        chunks_size = int((greatest_div) / nb_chunks)
         chunk_list = []
+         
       
-        for j in range(nb_chunks-1):
+        for j in range(nb_chunks+1):
             chunk_list.append(total_lag_time[int(j*chunks_size):int((j+1)*chunks_size)])
+            if j == nb_chunks:
+                chunk_list.append(total_lag_time[int(j*chunks_size):-len(total_lag_time)%nb_chunks])
         
         msd_results = Parallel(n_jobs=n_jobs)(delayed(self.calculate_msd_chunk_log)(
             current_chunk, nb_chunks=nb_chunks, time_end=time_end, traj=traj, msd_nbpt=None
@@ -123,7 +134,8 @@ class DiffusionSimulation2:
     
     def parallel_no_chunk(self, traj, time_end=1/4, msd_nbpt = 2000,n_jobs=5):
         max_lagtime = int(len(traj) * time_end)
-        total_lag_time = np.unique([int(lag) for lag in np.logspace(0, int(np.log10(max_lagtime)), msd_nbpt)])
+        total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
+        
         
         def single_msd(lag):
             return np.mean((traj[:-lag] - traj[lag:]) ** 2)
@@ -155,41 +167,5 @@ class DiffusionSimulation2:
         std_msd = np.std(mean_msd,axis=0)
         return np.mean(mean_msd, axis=0),std_msd
             
-    def compare_msd(self, N):
-        trajs = self.run_parallel(repetitions=50, n_jobs=5, npts=N, Amplitude=0)
-        print(f'run_msd_regular(): working...')
-        t0 = time.time()
-        msd,std = self.mean_std_msd(self.mean_square_displacement_list, trajs)
-        print(f'run_msd_regular(): done in {time.time() - t0:.1f} s')
-    
-        print(f'run_msd_calculate(): Parallel working...')
-        t0 = time.time()
-        msd_parallel_no_chunk,std_parallel_no_chunk = self.mean_std_msd(self.parallel_no_chunk, trajs)
-        print(f'run_msd_calculate(): Parallel done in {time.time() - t0:.1f} s')
-    
-        print(f'run_msd_chunk(): Parallel working...')
-        t0 = time.time()
-        msd_chunk,std_chunk = self.mean_std_msd(self.run_parallel_msd_chunk_log, trajs)
-        print(f'run_msd_chunk(): Chunk done in {time.time() - t0:.1f} s')
-        
-        return [msd,msd_parallel_no_chunk, msd_chunk],[std,std_parallel_no_chunk,std_chunk]
-    
 
-
-part = DiffusionSimulation2(dt = 1e-5, frequency=0)
-N = int(1e5)
-def free_diffusion_linear(t):
-    return(2*part.rotational_einstein_diff*t)
-#t,msd= part.load_and_mean_logmsd(msd_file_name ='logmsdtrajectories_10000000points_amplitude_0kT_dt_1e-05_torque_0',nb_files=10, traj_len = 10000000, time_end = 1/4)
-[msd,msd_parallel_no_chunk,msd_chunk],[std,std_parallel_no_chunk,std_chunk] = part.compare_msd(N)
-t = np.unique([int(lag) for lag in np.logspace(0, int(np.log10(N/4)), 2000)])*1e-5
- 
-fig, ax = plt.subplots(figsize = (9, 6))
-ax.plot(t, msd_parallel_no_chunk, label = 'Mean MSD 50 trajectories, A = 0kT, torque = 0kT, method = parallel_no_chunk')
-#ax.scatter(t, msd_chunk, s=1, label = 'MSD mean 2nd method for 0kT')
-ax.fill_between(t, msd_parallel_no_chunk - std_parallel_no_chunk, msd_parallel_no_chunk + std_parallel_no_chunk, color='gray', alpha=0.3)
-ax.plot(t,free_diffusion_linear(t), color = 'red', label = '2Dt')
-ax.set_xlabel('t[s]')
-ax.set_ylabel('<x²> [rad²]')
-plt.legend()
 
