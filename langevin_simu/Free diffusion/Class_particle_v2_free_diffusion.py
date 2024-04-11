@@ -59,9 +59,11 @@ class DiffusionSimulation2:
         A *= self.k_b * self.T_K
         x = 0
         positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x - self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
-        position = np.array(positions) 
-        position.astype(np.float32)
-        return position
+        np.insert(positions,[0],0)
+        positions = np.array(positions) 
+        
+        positions.astype(np.float32)
+        return positions
     
     def regular_linear_msd(self, traj = None, time_end = 1/4, time_skip = 100):
         """Compute the mean square displacement by iterating through an array of lag times
