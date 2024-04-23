@@ -21,13 +21,13 @@ D = 0.16480238117707385
     
 def plot_trajs():
     trajs = [np.load(f'trajectories_1000000points_amplitude_0kT_dt_1e-05_torque_0kT.npy')[0],np.load(f'trajectories_1000000points_amplitude_1kT_dt_1e-05_torque_0kT.npy')[0],np.load(f'trajectories_1000000points_amplitude_2kT_dt_1e-05_torque_0kT.npy')[0],
-             np.load(f'trajectories_1000000points_amplitude_3kT_dt_1e-05_torque_0kT.npy')[0]]
+             np.load(f'trajectories_1000000points_amplitude_3kT_dt_1e-05_torque_0kT.npy')[1],np.load('trajectories_1000000points_amplitude_5kT_dt_1e-05_torque_0kT.npy')[1]]
     
     t = np.arange(0,len(trajs[0]))*1e-5
-    plt.plot(t[: ],trajs[0][: ],linewidth =0.5,label='0kT')
-    plt.plot(t[: ],trajs[1][: ],linewidth =0.5,label='1kT')
-    plt.plot(t[: ],trajs[2][: ],linewidth =0.5,label='2kT')
-    plt.plot(t[: ],trajs[3][: ],linewidth =0.5,label='3kT')
+    plt.plot(t[: ],trajs[0][: ],linewidth =0.5,label='A = 0kT')
+    plt.plot(t[: ],trajs[1][: ],linewidth =0.5,label='A = 1kT')
+    plt.plot(t[: ],trajs[2][: ],linewidth =0.5,label='A = 2kT')
+    plt.plot(t[: ],trajs[3][: ],linewidth =0.5,label='A = 3kT')
     plt.xlabel('time [s]')
     plt.ylabel('displacement [rad]')
     plt.legend()

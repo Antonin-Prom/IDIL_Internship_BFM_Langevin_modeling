@@ -87,7 +87,7 @@ class DiffusionSimulation2:
         return np.array(msd)  
     
     
-    def run_parallel(self, repetitions=10, n_jobs=5, npts = None, Amplitude = None, torque = None):
+    def run_parallel(self, repetitions=10, n_jobs=5, npts = None, Amplitude = 0, torque = None):
         ''' parallel computations of generate_traj() 
             parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
         '''
@@ -148,39 +148,20 @@ class DiffusionSimulation2:
         
         return msd_results
         
-    def load_traj_and_logmsd(self, traj_name = None,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000):
+    def load_traj_and_logmsd_chunk(self, traj_name = None,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
         trajs = np.load(f'{traj_name}.npy')
-        for i in range(len(trajs)):
+        for i in range(len(trajs[:nb_traj])):
             self.run_parallel_msd_chunk_log(nb_chunks=nb_chunks, n_jobs=n_jobs, time_end=time_end, msd_nbpt = msd_nbpt, traj=trajs[i],n= f'logmsd{traj_name},num_{i:.0f}')
 
-    def load_and_mean_logmsd(self, msd_file_name = None, nb_files = 10,traj_len = int ,time_end = None):
-        msd_list = []
-        for i in range(nb_files):
-            msd_list.append(np.load(f'{msd_file_name},num_{i}.npy'))
-        mean_msd = np.concatenate(([0],np.mean(msd_list, axis=0)))
-        time_axis = np.concatenate(([0],np.logspace(int(np.log10(self.dt_s)),np.log10(int(traj_len*time_end)*self.dt_s),len(mean_msd)-1)))
-        return time_axis,mean_msd
-    
-    
-    def mean_std_msd(self, function, trajs):
-        mean_msd = []
-        for traj in trajs:
-            mean_msd.append(function(traj=traj))
-        std_msd = np.std(mean_msd,axis=0)
-        return np.mean(mean_msd, axis=0),std_msd
-            
+    def mean_msd_and_time_axis(self, trajs,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        msd_matrix = []
+        max_lagtime = int(len(trajs[0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.parallel_no_chunk(trajs[i], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        std = np.concatenate(([0],np.std(msd_matrix,axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))))))  
+        return time_axis,mean_msd,std,msd_matrix
 
 
-class DiffusionSimulation2:
-    def __init__(self,frequency = 26, torque = 5, dt=1e-5):
-        # Constants
-        self.T_K = 300
-        self.k_b = 1.3806452e-23
-        self.R_m = 1e-6
-        self.m_kg = 1.1e-14 
-        self.viscosity_NS_m2 = 0.001
-        self.load = 6 * np.pi * self.viscosity_NS_m2 * self.R_m 
-        self.rotational_drag = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
-        
-object1 = DiffusionSimulation2()
-mass = object1.m_kg
+

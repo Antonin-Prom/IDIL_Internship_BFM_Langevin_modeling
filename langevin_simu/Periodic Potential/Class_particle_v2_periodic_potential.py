@@ -153,14 +153,16 @@ class DiffusionSimulation2:
         for i in range(len(trajs[:nb_traj])):
             self.run_parallel_msd_chunk_log(nb_chunks=nb_chunks, n_jobs=n_jobs, time_end=time_end, msd_nbpt = msd_nbpt, traj=trajs[i],n= f'logmsd{traj_name},num_{i:.0f}')
 
-    def mean_msd_and_time_axis(self, trajs,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+    def mean_msd_and_time_axis(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
         msd_matrix = []
         max_lagtime = int(len(trajs[0]) * time_end)
         for i in range(len(trajs[:nb_traj])):
             msd_matrix.append(self.parallel_no_chunk(trajs[i], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
         mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
         std = np.concatenate(([0],np.std(msd_matrix,axis=0)))
-        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))))))  
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
         return time_axis,mean_msd,std,msd_matrix
 
 def plot_drift_msd_std():
@@ -174,7 +176,40 @@ def plot_drift_msd_std():
     plt.ylabel('Square displacement (rad²)')
     plt.show()
 
-def parabolic_drift(t,D,F):
-    return 2*D*t + F*t
+
+def compare_dt_10kT():
+    total_time = int(1e8*1e-5)
+    for dt in [1e-4,5e-4,1e-3,5e-3,1e-2,5e-2]:
+        p = DiffusionSimulation2(dt)
+        nb_points = int(total_time/dt)
+        p.run_parallel( repetitions=10, n_jobs=5, npts = nb_points, Amplitude = 10, torque = 0)
+
+def store_msd():
     
+    traj4 = np.load('trajectories_10000000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+    traj45 = np.load('trajectories_2000000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+    traj3 = np.load('trajectories_1000000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+    traj35 = np.load('trajectories_200000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+    traj2 = np.load('trajectories_100000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+    traj25 = np.load('trajectories_20000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+    traj_list = [traj4,traj45,traj3,traj35,traj2,traj25]
+    dt_list = [1e-4,5e-4,1e-3,5e-3,1e-2,5e-2]
+    counter = 0
+    for trajs in traj_list:
+        p = DiffusionSimulation2(dt = dt_list[counter])
+        counter += 1
+        time_axis,mean_msd,std,msd_matrix = p.mean_msd_and_time_axis(trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = 10)
+        np.save(f't,msd,std,dt={p.dt_s},10kT',[time_axis,mean_msd,std])
+    
+def plot_msd():
+    dt_list = [0.0001,0.0005,0.001,0.005,0.01,0.05]
+    
+    for dt in dt_list:
+        t,msd,_ = np.load(f't,msd,std,dt={dt},10kT.npy')
+        t=t*dt
+        plt.loglog(t,msd,label=f'{dt}')
+        plt.legend()
+        
+
+
 
