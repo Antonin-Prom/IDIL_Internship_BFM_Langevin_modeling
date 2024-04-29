@@ -16,11 +16,11 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from joblib import Parallel, delayed
 import time
-
-
+from scipy.interpolate import interp1d
+import scipy
 
 class DiffusionSimulation2:
-    def __init__(self,frequency = 26, torque = 0, dt=1e-5):
+    def __init__(self,frequency = 26, torque = 0, dt = None):
         # Constants
         self.T_K = 300
         self.k_b = 1.3806452e-23
@@ -99,42 +99,28 @@ class DiffusionSimulation2:
         np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
     
-    def calculate_msd_chunk_log(self, current_chunk, nb_chunks=10, time_end=1/4, traj= None, msd_nbpt = None):
-        traj = np.array(traj)
-        msd_chunk = [np.mean((traj[:-lag] - traj[lag:]) ** 2) for lag in current_chunk]
-        return msd_chunk
-    
-    def run_parallel_msd_chunk_log(self, nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, traj=None,n=1234):
-        
-        max_lagtime = int(len(traj) * time_end)
-        total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
-        
-        def find_div_nb_chunk(total_lag_time):
-            count = len(total_lag_time)
-            while count%nb_chunks != 0:
-                count = count - 1
-            return count
-        
-        greatest_div = find_div_nb_chunk(total_lag_time)
-        chunks_size = int((greatest_div) / nb_chunks)
-        chunk_list = []
-         
-      
-        for j in range(nb_chunks+1):
-            chunk_list.append(total_lag_time[int(j*chunks_size):int((j+1)*chunks_size)])
-            if j == nb_chunks:
-                chunk_list.append(total_lag_time[int(j*chunks_size):-len(total_lag_time)%nb_chunks])
-        
-        msd_results = Parallel(n_jobs=n_jobs)(delayed(self.calculate_msd_chunk_log)(
-            current_chunk, nb_chunks=nb_chunks, time_end=time_end, traj=traj, msd_nbpt=None
-        ) for current_chunk in chunk_list)
-        
-        
-        final_msd = np.concatenate(msd_results)
-        np.save(f'{n}', final_msd)
-        return final_msd
     
     def parallel_no_chunk(self, traj, time_end=1/4, msd_nbpt = 2000,n_jobs=5):
+        """
+        
+
+        Parameters
+        ----------
+        traj : array
+            trajectory of angular displacement.
+        time_end : float, optional
+            fraction of the trajectory array on which is performed the msd . The default is 1/4.
+        msd_nbpt : int, optional
+            Number of MSD points. The default is 2000.
+        n_jobs : TYPE, optional
+            number of worker assigned to the task. The default is 5.
+
+        Returns
+        -------
+        array
+            MSD array.
+
+        """
         max_lagtime = int(len(traj) * time_end)
         total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
         
@@ -164,52 +150,114 @@ class DiffusionSimulation2:
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
         return time_axis,mean_msd,std,msd_matrix
-
-def plot_drift_msd_std():
-    traj_drift = np.load('trajectories_100000points_amplitude_0kT_dt_1e-05_torque_20kT.npy')
-    p = DiffusionSimulation2()
-    time_d,mean_msd_d,std,msd_matrix_d = p.mean_msd_and_time_axis(traj_drift,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = 10)
-    time_d *= 1e-5
-    plt.plot(time_d,mean_msd_d, label = 'Numerical MSD')
-    plt.fill_between(time_d, mean_msd_d -std, mean_msd_d + std, color='gray', alpha=0.6, label='std')
-    plt.xlabel('Lag time (s)')
-    plt.ylabel('Square displacement (rad²)')
-    plt.show()
-
-
-def compare_dt_10kT():
-    total_time = int(1e8*1e-5)
-    for dt in [1e-4,5e-4,1e-3,5e-3,1e-2,5e-2]:
-        p = DiffusionSimulation2(dt)
-        nb_points = int(total_time/dt)
-        p.run_parallel( repetitions=10, n_jobs=5, npts = nb_points, Amplitude = 10, torque = 0)
-
-def store_msd():
     
-    traj4 = np.load('trajectories_10000000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
-    traj45 = np.load('trajectories_2000000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
-    traj3 = np.load('trajectories_1000000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
-    traj35 = np.load('trajectories_200000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
-    traj2 = np.load('trajectories_100000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
-    traj25 = np.load('trajectories_20000points_amplitude_10kT_dt_1e-05_torque_0kT.npy')
+
+    """
+    Lifson and Jackson methods
+    """
+
+    def integrand1(self, x, amplitude):
+        return np.exp(self.tilted_periodic_potential(amplitude, x))
+    
+    def factor1(self, amplitude):  
+        result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
+        return result
+    
+    def lifson_jackson_noforce(self, amplitude): #Meet einstein coeff at 0 barrier
+        lifson_jackson1 = self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
+        return lifson_jackson1 
+        
+        
+        
+def compare_ampli(ampli_min,ampli_max,dt):
+    total_time = int(1e8*1e-5)
+    for A in range(ampli_min,ampli_max):
+        p = DiffusionSimulation2(dt=dt)
+        p.run_parallel( repetitions=50, n_jobs=5, npts = nb_points, Amplitude = Ampli, torque = 0)
+
+    
+def store_msd_given_Amplitude(Ampli):
+    
+    traj4 = np.load(f'trajectories_10000000points_amplitude_{Ampli}kT_dt_0.0001_torque_0kT.npy')
+    traj45 = np.load(f'trajectories_2000000points_amplitude_{Ampli}kT_dt_0.0005_torque_0kT.npy')
+    traj3 = np.load(f'trajectories_1000000points_amplitude_{Ampli}kT_dt_0.001_torque_0kT.npy')
+    traj35 = np.load(f'trajectories_200000points_amplitude_{Ampli}kT_dt_0.005_torque_0kT.npy')
+    traj2 = np.load(f'trajectories_100000points_amplitude_{Ampli}kT_dt_0.01_torque_0kT.npy')
+    traj25 = np.load(f'trajectories_20000points_amplitude_{Ampli}kT_dt_0.05_torque_0kT.npy')
     traj_list = [traj4,traj45,traj3,traj35,traj2,traj25]
     dt_list = [1e-4,5e-4,1e-3,5e-3,1e-2,5e-2]
     counter = 0
     for trajs in traj_list:
         p = DiffusionSimulation2(dt = dt_list[counter])
+        time_axis,mean_msd,std,matrix = p.mean_msd_and_time_axis(trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = 50)
+        np.save(f't,msd,dt={p.dt_s},{Ampli}kT',[time_axis*dt_list[counter],mean_msd])
         counter += 1
-        time_axis,mean_msd,std,msd_matrix = p.mean_msd_and_time_axis(trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = 10)
-        np.save(f't,msd,std,dt={p.dt_s},10kT',[time_axis,mean_msd,std])
-    
-def plot_msd():
-    dt_list = [0.0001,0.0005,0.001,0.005,0.01,0.05]
-    
-    for dt in dt_list:
-        t,msd,_ = np.load(f't,msd,std,dt={dt},10kT.npy')
-        t=t*dt
-        plt.loglog(t,msd,label=f'{dt}')
-        plt.legend()
         
+        
+        
+def qth_moment(q,t,D_eff):
+    return((2**q)/(np.sqrt(np.pi)))*(D_eff*t)**(q/2)*np.math.factorial((1+q)/2)
+    
+def generate_theory_msd(absciss,D_fit):
+    theoretical_msd = []
+    for t in absciss:
+        msd_theo = qth_moment(2,t,D_fit)
+        theoretical_msd.append(msd_theo)
+    return theoretical_msd
+
+def asdefaveri_msd(A,dt):
+    p = DiffusionSimulation2(dt=dt)
+    a = 2*np.pi/p.frequency
+    D = p.rotational_einstein_diff           
+    D_eff = p.lifson_jackson_noforce(5)
+    
+    def defaveri_stationary(A):
+        X = np.linspace(0,a,1000)
+        Y = boltz_exp(A,X)
+        Z = np.mean(Y)
+        return (np.mean((X**2)*Y)/Z)   
+     
+    def boltz_exp(A,x):
+        return np.exp(-p.tilted_periodic_potential(A, x))
+        
+    def linear_D(t,D,shift):
+        return (2*D*t + shift)/(a*a)
+    
+    t, msd = np.load(f't,msd,dt={dt},{A}kT.npy')
+    absciss = 2*D*t
+    norm_msd = msd/(a*a)
+    
+    min_absciss_value = 1  # Adjust this value as needed
+    
+    window_indices = np.where(absciss > min_absciss_value)[0]
+    absciss_window = absciss[window_indices]
+    norm_msd_window = norm_msd[window_indices]
+    
+    popt, pcov = scipy.optimize.curve_fit(linear_D, absciss_window, norm_msd_window,)
+    D_fit, shift = popt[0], popt[1]
+    print('D_fit = ',D_fit)
+    print('D_eff = ',D_eff)
+    stationary_state = defaveri_stationary(A) 
+    return absciss,norm_msd,D_fit,shift,stationary_state,a
+
+def plot_msd_asdefvari(A,dt):
+    absciss,norm_msd,D_fit,shift,stationary_state,a = asdefaveri_msd(A,dt)
+    
+    def linear_D(t,D,shift):
+        return (2*D*t + shift)/(a*a)
+    
+    plt.loglog(absciss,norm_msd)
+    plt.loglog(absciss,stationary_state*np.ones(len(absciss)),linestyle ='--',)
+    #plt.loglog(absciss[int(len(absciss)/2):],linear_D(absciss,D_eff,shift)[int(len(absciss)/2):],linestyle ='--',color='green')
+    frac = 1.5
+    plt.loglog(absciss,generate_theory_msd(absciss,D_fit),color='red')
+    plt.loglog(absciss[int(len(absciss)/frac):],linear_D(absciss,D_fit,shift)[int(len(absciss)/frac):],linestyle ='--',color='black') #[int(len(absciss)/4):]
+
+for A in range(0,5):
+    plot_msd_asdefvari(A,0.0005)
+
+plt.legend()
+plt.show()
 
 
 
