@@ -8,48 +8,25 @@ import numpy as np
 import time
 
 
-def convert_time_axis(Dt_a,dt):
-    sim = DiffusionSimulation()
-    t = 26*26*Dt_a/sim.rotational_einstein_diff
-    N = int(t/dt)
-    return t,N
-    
+npts = int(1e7)
 
-def generate_traj(N,A,dt):
-    sim = DiffusionSimulation(dt = dt)
+def generate_traj(N,A,dt,torque):
+    sim = DiffusionSimulation(dt = dt, torque = torque)
     traj = sim.main_traj( N, A)
+    traj = np.unwrap(traj)
     traj = traj.astype(np.float32)
     return traj
 
-def generate_traj_static(N=3600000,A=2,dt=1e-5):
-    sim = DiffusionSimulation(dt)
-    traj = sim.static_process( N, A, 0)
-    #np.save(f'traj_static_{N:.0f}_amplitude_{A:.0f}_dt_{dt:.1f}',traj)
-    return traj
-
-"""
-traj_static = np.load('traj_10000000_amplitude_2.npy',allow_pickle=True)
-traj_proceed =  np.load('traj_walrus_10000000_amplitude_2_dt_0.0.npy',allow_pickle=True)
-"""
-sim = DiffusionSimulation(1e-5)
-
-def run_msd_traj(traj):
-    msd = sim.mean_square_displacement1(traj,0, 1/4, 100)
-    return msd
-
-npts = int(1e8)
-                                                                                                                                                                       
-
-def run_parallel(repetitions=10, n_jobs=5, Amplitude = None,dt=None):
+def run_parallel(repetitions=10, n_jobs=5, Amplitude = None,dt=None, torque = None):
     ''' parallel computations of long_loop() 
         parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
     '''
     # Parallel:
     print(f'run_serial_parallel(): Parallel working...')
     t0 = time.time()
-    parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj)(N = npts,A = Amplitude , dt = dt) for i in range(repetitions))
+    parallel_out = Parallel(n_jobs=n_jobs)(delayed(generate_traj)(N = npts,A = Amplitude , dt = dt, torque = torque) for i in range(repetitions))
     print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-    np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_{dt}',parallel_out)
+    np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_{dt}_torque_{torque:.0f}',parallel_out)
     return parallel_out
 
 #trajectories = np.load(f'trajectories_{npts:.0f}points_amplitude_5kT_dt_10^-4.npy',allow_pickle=True)
@@ -163,9 +140,7 @@ def calculate_msd_chunk_log(current_chunk, nb_chunks=10, time_end=1/4, traj= Non
 
 def run_parallel_msd_chunk_log(nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = None, traj=None,n=None):
     print(f'run_msd_parallel(): Parallel working...')
-    t0 = time.time()
-    
-    traj = np.unwrap(traj)    
+    t0 = time.time()  
     max_lagtime = int(len(traj) * time_end)
     total_lag_time = np.unique([int(lag) for lag in (np.logspace(0,int(np.log10(max_lagtime)),msd_nbpt))])
     chunks_size = int(len(total_lag_time) / nb_chunks)
@@ -187,7 +162,12 @@ def load_and_logmsd(name = None,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt =
     trajs = np.load(f'{name}.npy')
     for i in range(len(trajs)):
         run_parallel_msd_chunk_log(nb_chunks=nb_chunks, n_jobs=n_jobs, time_end=time_end, msd_nbpt = msd_nbpt, traj=trajs[i],n= f'logmsd{name},num_{i:.0f}')
-    
+
+def load_and_mean_logmsd(name = None, n = int):
+    msd_list = []
+    for i in range(n):
+        msd_list.append(np.load(f'{name},num_{i}.npy'))
+    return np.mean(msd_list, axis=0)
 
 """
 # Load trajectories and set other parameters
@@ -230,9 +210,19 @@ for i in range(0,10):
     run_parallel_msd_chunk_log(nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, traj=trajectories[i],n=i)
 """
     
-    
+"""  
     #(f'logmsd_traj{i:.0f)_end4_amplitude_5kT_dt_10^-4.npy)
-    
+t = np.arange(len(traj0))*1e-5 
+plot(t,traj3,label = 'Amplitude = 0kT')
+plot(t,traj0,label = 'Amplitude = 1kT' )
+plot(t,traj1,label = 'Amplitude = 5kT')
+plot(t,traj2,label = 'Amplitude = 10kT')
+
+plt.xlabel('t[s]')
+plt.ylabel('x [rad]')
+plt.legend()
+plt.show()
+"""
 
 """
 popt, pcov = scipy.optimize.curve_fit(linear_D, time_array, msd_test)
@@ -271,12 +261,14 @@ ax.set_ylabel('<x²> [rad²]')
 plt.legend()
 
 
+plt.fill_between(t, msd - std, msd + std, color='gray', alpha=0.3, label='std')
+std
 
-
+t0 = np.logspace(-4,log10(25000000*1e-4),len(mean)-1)
+t0 = np.insert(t0,0,0)
 theo_msd_5 = theory_curve_oscillatory(t0,5)
 fig, ax = plt.subplots(figsize = (9, 6))
-t0 = np.logspace(0,log10(25000000*1e-4),len(msd0))
-ax.scatter(t0, msd0, s=0.5, label = 'Simulated MSD_mean10 for 5kT')
+ax.scatter(t0, mean, s=0.5, label = 'Simulated MSD_mean10 for 5kT')
 ax.scatter(t0, theo_msd_5, s=0.5, label = 'Theoretical MSD for 5kT,')
 ax.scatter(t0,linear_D(t0,0.0002221,0), s=0.5, label = '2d*t')
 ax.set_xscale("log")

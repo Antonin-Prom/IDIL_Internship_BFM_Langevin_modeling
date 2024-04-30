@@ -32,10 +32,6 @@ class DiffusionSimulation:
         return W_seq
 
 
-    
-
-    
-
     def tilted_periodic_potential(self, A, x):
         return self.torque*x + A * np.cos(x * self.frequency)
     
