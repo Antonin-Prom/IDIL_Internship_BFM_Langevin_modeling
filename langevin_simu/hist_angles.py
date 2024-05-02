@@ -16,7 +16,7 @@ def generate_mean_traj(N,L,A,torque):
     mean_traj = np.mean(traj_matrix,axis=0)
     return mean_traj
 
-#mean_traj = generate_mean_traj(1,1000000,3,100)
+mean_traj = generate_mean_traj(1,1000000,0.5,0)
 
 
 def get_trajs(amplitude,dt):
