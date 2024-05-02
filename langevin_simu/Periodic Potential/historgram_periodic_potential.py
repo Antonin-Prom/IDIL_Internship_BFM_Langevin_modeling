@@ -6,7 +6,7 @@ import sys
 from Class_particle_v2_drift_diffusion import *
 from scipy.stats import norm
 from scipy.optimize import curve_fit
-
+#r
 
 traj_matrix = []
 def generate_mean_traj(N,L,A,torque):

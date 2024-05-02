@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Apr 29 10:52:27 2024
-
+r
 @author: CBS
 """
 from Class_particle_v2_periodic_potential import *

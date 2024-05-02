@@ -3,7 +3,7 @@
 Created on Fri Mar 22 09:52:36 2024
 
 Class particle v2
-
+r
 - Simulate large trajectories
 - Compute MSD
 - Compute mean MSD 
