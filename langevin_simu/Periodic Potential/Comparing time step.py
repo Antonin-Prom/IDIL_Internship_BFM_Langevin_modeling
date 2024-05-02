@@ -35,8 +35,6 @@ def store_msd_given_Amplitude(Ampli):
         np.save(f't,msd,dt={p.dt_s},{Ampli}kT',[time_axis*dt_list[counter],mean_msd])
         counter += 1
 
-def linear_D(t,D,shift):
-    return 2*D*t + shift
 
 def compare_dt_msd_given_amplitude(Ampli):
     dt_list = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05]
@@ -58,30 +56,11 @@ def compare_dt_msd_given_amplitude(Ampli):
     
     global_msd = []
     global_time = []
-    
-    
     for j in ascending_mother:
         global_msd.append(j[1])
         global_time.append(j[0])
-        
-    p_opt, pcov = scipy.optimize.curve_fit(linear_D,global_time,global_msd) 
-    D_fit = p_opt[0]
-    print(D_fit)
-    shift = p_opt[1]
-    print(shift)
-    print(type(global_time))
-    global_time = np.array(global_time)
-    y = linear_D(global_time, D_fit, shift)
-    plt.plot(global_time,y)
     plt.scatter(global_time,global_msd, s = 0.1)
     plt.xscale('log')
     plt.yscale('log')
     plt.xlabel('time [s]')
     plt.ylabel('mean square displacement')
-    
-    
-    
-    
-    
-    
-    

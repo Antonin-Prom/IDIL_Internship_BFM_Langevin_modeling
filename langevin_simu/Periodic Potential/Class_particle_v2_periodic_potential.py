@@ -87,7 +87,7 @@ class DiffusionSimulation2:
         return np.array(msd)  
     
     
-    def run_parallel(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
+    def run_parallel(self, repetitions=10, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
         ''' parallel computations of generate_traj() 
             parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
         '''
@@ -96,7 +96,7 @@ class DiffusionSimulation2:
         t0 = time.time()
         parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj)(N = npts,A = Amplitude) for i in range(repetitions))
         print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude:.0f}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
+        np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
     
     
@@ -196,12 +196,8 @@ def store_msd_given_Amplitude(Ampli):
         
         
 def qth_moment(q,t,D_eff):
-    t *= (0.1648)/(2*np.pi/26)**2
-    return((2**q)/(np.sqrt(np.pi)))*(D_eff*t)**(q/2)*scipy.special.gamma((1+q)/2)
+    return((2**q)/(np.sqrt(np.pi)))*(D_eff*t)**(q/2)*np.math.factorial((1+q)/2)
     
-def second_moment(t,D_eff):
-    return(4/(np.sqrt(np.pi)))*(D_eff*t)*scipy.special.gamma(3/2)
-
 def generate_theory_msd(absciss,D_fit):
     theoretical_msd = []
     for t in absciss:
@@ -213,7 +209,7 @@ def asdefaveri_msd(A,dt):
     p = DiffusionSimulation2(dt=dt)
     a = 2*np.pi/p.frequency
     D = p.rotational_einstein_diff           
-    D_eff = p.lifson_jackson_noforce(A)
+    D_eff = p.lifson_jackson_noforce(5)
     
     def defaveri_stationary(A):
         X = np.linspace(0,a,1000)
@@ -239,8 +235,29 @@ def asdefaveri_msd(A,dt):
     
     popt, pcov = scipy.optimize.curve_fit(linear_D, absciss_window, norm_msd_window,)
     D_fit, shift = popt[0], popt[1]
-    print('D_fit = ',D_fit*2*D)
+    print('D_fit = ',D_fit)
     print('D_eff = ',D_eff)
     stationary_state = defaveri_stationary(A) 
-    return absciss,norm_msd,D_fit,D_eff,shift,stationary_state,a
+    return absciss,norm_msd,D_fit,shift,stationary_state,a
+
+def plot_msd_asdefvari(A,dt):
+    absciss,norm_msd,D_fit,shift,stationary_state,a = asdefaveri_msd(A,dt)
+    
+    def linear_D(t,D,shift):
+        return (2*D*t + shift)/(a*a)
+    
+    plt.loglog(absciss,norm_msd)
+    plt.loglog(absciss,stationary_state*np.ones(len(absciss)),linestyle ='--',)
+    #plt.loglog(absciss[int(len(absciss)/2):],linear_D(absciss,D_eff,shift)[int(len(absciss)/2):],linestyle ='--',color='green')
+    frac = 1.5
+    plt.loglog(absciss,generate_theory_msd(absciss,D_fit),color='red')
+    plt.loglog(absciss[int(len(absciss)/frac):],linear_D(absciss,D_fit,shift)[int(len(absciss)/frac):],linestyle ='--',color='black') #[int(len(absciss)/4):]
+
+for A in range(0,5):
+    plot_msd_asdefvari(A,0.0005)
+
+plt.legend()
+plt.show()
+
+
 
