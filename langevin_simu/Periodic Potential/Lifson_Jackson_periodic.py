@@ -46,16 +46,21 @@ def load_and_D():
         D_fit,D_eff,_ = asdefaveri_msd(A,0.001)
         results0_1.append([D_fit,D_eff])#pcov[0]
     np.save('LJ_D_fit,D_eff,0_1',results0_1)#pcov
-load_and_D()
-"""
+
+
+results0_1 = np.load('LJ_D_fit,D_eff,0_1.npy')
+results = np.load('LJ_D_fit,D_eff.npy')
 D_fit = []
 D_eff = []
-[D_fit.append(results[:][i][0]) for i in range(len(A_list))]
-[D_eff.append(results[:][i][1]) for i in range(len(A_list))]
+[D_fit.append(results0_1[:][i][0]) for i in range(len(A_list0_1))]
+[D_eff.append(results0_1[:][i][1]) for i in range(len(A_list0_1))]
+[D_fit.append(results[:][i][0]) for i in range(len(A_list1_5))]
+[D_eff.append(results[:][i][1]) for i in range(len(A_list1_5))]
 print(results)
 print(D_fit)
+
+A_list=[x for n in (A_list0_1,A_list1_5) for x in n]
 
 plt.plot(A_list,D_fit)
 plt.plot(A_list,D_eff)
 plt.show()
-"""
