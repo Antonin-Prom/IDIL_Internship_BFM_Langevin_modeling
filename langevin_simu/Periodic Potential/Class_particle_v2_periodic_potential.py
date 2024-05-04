@@ -96,7 +96,7 @@ class DiffusionSimulation2:
         t0 = time.time()
         parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj)(N = npts,A = Amplitude) for i in range(repetitions))
         print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude:.0f}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
+        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
     
     
