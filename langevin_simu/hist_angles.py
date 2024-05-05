@@ -37,6 +37,7 @@ def plot_hist(amplitude,dt,i):
     plt.ylabel('density')
     plt.show()
 
+matrix_t = hist_at_t(1,1e-4,0)
 plt.hist(matrix_t,bins = 10000,density=True)
 plt.title('Histogram of positions at t=0 over 10000 realisations')
 plt.xlabel('angle [rad]')
