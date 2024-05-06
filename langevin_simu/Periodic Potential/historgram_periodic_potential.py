@@ -6,71 +6,58 @@ import sys
 from Class_particle_v2_periodic_potential import *
 from scipy.stats import norm
 from scipy.optimize import curve_fit
-
+from scipy.special import jv
 
 traj_matrix = []
-def generate_mean_traj(N,L,A,torque):
-    part = DiffusionSimulation(dt = 1e-5,torque = 100)
-    for i in range(N):
-        traj = part.proceed_traj1(L ,A)
-        traj_matrix.append(traj)
-    mean_traj = np.mean(traj_matrix,axis=0)
-    return mean_traj
-
-#mean_traj = generate_mean_traj(1,1000000,3,100)
 
 
-def get_trajs(amplitude,dt):
-    trajs = np.load(f'trajectories_10000000points_amplitude_{amplitude}kT_dt_{dt}_torque_0kT.npy')                  
-    return trajs
+def get_trajs():
+    traj_matrix = []
+    trajs = np.load(f'trajectories_1000000,nb_traj_1000points_amplitude_1kT,frequency_10_dt_0.001_torque_0kT.npy')
+    [traj_matrix.append(np.mod(traj,2*np.pi)-np.pi) for traj in trajs]                  
+    return traj_matrix
 
-def hist_at_t(amplitude,dt,t):
-    trajs = get_trajs(amplitude,dt)
+def hist_at_t(t,trajs):
     matrix_t = [trajs[i][t]  for i in range(len(trajs))]
     return matrix_t
 
 
-def total_hist(amplitude,dt):
-    """
-    Combine the whole histogram of every traj in a single one : meaningless
 
-    Parameters
-    ----------
-    amplitude : TYPE
-        DESCRIPTION.
-    dt : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    None.
-
-    """
-    trajs = get_trajs(amplitude,dt)
-    num_bins = 10000
-    accumulated_hist = np.zeros(num_bins)
-    for traj in trajs:
-        hist, _ = np.histogram(traj, bins=num_bins,range=(-np.pi, np.pi))
-        accumulated_hist += hist
+def histogram_periodic(trajs,t,bins):
+    def plot_hist(t,bins):
+        plt.hist(hist_at_t(t,trajs), bins=bins, range=(-np.pi, np.pi), density=True, alpha=0.5, label='Histogram')
+        
+        plt.xlabel('angle [rad]')
+        plt.ylabel('density')
     
-    mean_hist = accumulated_hist*num_bins / (len(trajs)*len(trajs[0]))
-    bins_space = np.linspace(-np.pi,np.pi,num_bins)
-    plt.plot(bins_space,mean_hist)
-    plt.xlabel('angle [rad]')
-    plt.ylabel('density')
-    plt.show()
+        # Plot theoretical distribution curve
+        space = np.linspace(-np.pi, np.pi, 100)
+        plt.plot(space, theory_distrib_i(space), label='Theoretical Distribution', color='red')
+        plt.plot(space, Bessel_function(space),linestyle = '--',color = 'black')
+        plt.show()
     
-def hist_at_t(t):
-    trajs = np.load('trajectories_1000000,nb_traj_1000points_amplitude_6kT,frequency_10_dt_0.001_torque_0kT.npy')
-    matrix_t = [trajs[i][t]  for i in range(len(trajs))]
-    return matrix_t
+    def theory_distrib_i(theta ):
+        #center on 0
+        GB = p.integrand1(theta+np.pi/2, 1)
+        integral = p.factor1(1)
+        N = 1/8 #normalisator
+        W_theta = GB * N #GB*(N-p.rotational_drag*integral)
+        return W_theta
+    
+    def Bessel_function(x):
+        return 2*np.pi*jv(0,10*(x))*1/8
+        
+    def theo_distrib():
+        space = np.linspace(-np.pi, np.pi, 100)
+        plt.plot(space, theory_distrib_i(space))
+        
+    # Assuming DiffusionSimulation2 class definition exists elsewhere in your code
+    p = DiffusionSimulation2(dt=0.001, frequency=10, torque=0)
+    plot_hist(t, bins=200)
+# Example usage:
+#\plot_hist(t=999999, bins=200)
 
-def plot_hist(t):
-    plt.hist(hist_at_t(t),bins = 200,density=True)
-    plt.title(f'Histogram of positions at t={t}ms over 1000 realisations')
-    plt.xlabel('angle [rad]')
-    plt.ylabel('density')
-    plt.show()
-    
+
+
 # A faire: 10000 realisations à 2kT, trouver comment fixer la densité à 1
     
