@@ -39,7 +39,7 @@ class DiffusionSimulation2:
         self.torque = torque*self.T_K*self.k_b
         
     def tilted_periodic_potential(self, A, x):
-        return self.torque*x + A * np.cos(x * self.frequency)
+        return self.torque*x + A * np.sin(x * self.frequency)
         
     def generate_seq(self, N):
         W_seq = np.random.normal(0, 1, N)
@@ -59,11 +59,36 @@ class DiffusionSimulation2:
         A *= self.k_b * self.T_K
         x = 0
         positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x - self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
-        np.insert(positions,[0],0)
+        np.insert(positions,[0],np.pi/2)
         positions = np.array(positions) 
         
         positions.astype(np.float32)
         return positions
+    
+    def main_traj_linear(self,N,A):
+        """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
+
+        Args:
+            N (int): trajectory length
+            A (float): barrier amplitude 
+
+        Returns:
+            array: angular trajectory
+        """
+        w = self.generate_seq(N)
+        A *= self.k_b * self.T_K
+        x = 0
+        positions = []
+        deter = []
+        stocha = []
+        for i in range(N):
+            deterministic = (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x - self.space_step)) / (2*self.space_step))
+            stochastic = np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i] 
+            x += -deterministic + stochastic
+            deter.append(deterministic)
+            stocha.append(stochastic)
+            positions.append(x) 
+        return positions,stocha,deter
     
     def regular_linear_msd(self, traj = None, time_end = 1/4, time_skip = 100):
         """Compute the mean square displacement by iterating through an array of lag times
@@ -95,6 +120,18 @@ class DiffusionSimulation2:
         print(f'run_serial_parallel(): Parallel working...')
         t0 = time.time()
         parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj)(N = npts,A = Amplitude) for i in range(repetitions))
+        print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
+        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
+        return parallel_out
+    
+    def run_parallel_linear(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
+        ''' parallel computations of generate_traj() 
+            parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
+        '''
+        # Parallel:
+        print(f'run_serial_parallel(): Parallel working...')
+        t0 = time.time()
+        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj_linear)(N = npts,A = Amplitude) for i in range(repetitions))
         print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
         np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
