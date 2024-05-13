@@ -176,7 +176,7 @@ class DiffusionSimulation2:
         for i in range(len(trajs[:nb_traj])):
             self.run_parallel_msd_chunk_log(nb_chunks=nb_chunks, n_jobs=n_jobs, time_end=time_end, msd_nbpt = msd_nbpt, traj=trajs[i],n= f'logmsd{traj_name},num_{i:.0f}')
 
-    def mean_msd_and_time_axis(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+    def mean_msd_and_time_axis_std(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
         t0 = time.time()
         msd_matrix = []
         max_lagtime = int(len(trajs[0]) * time_end)
@@ -187,7 +187,17 @@ class DiffusionSimulation2:
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
         return time_axis,mean_msd,std,msd_matrix
-    
+
+    def mean_msd_and_time_axis(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
+        msd_matrix = []
+        max_lagtime = int(len(trajs[0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.parallel_no_chunk(trajs[i], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
+        return time_axis,mean_msd
 
     """
     Lifson and Jackson methods

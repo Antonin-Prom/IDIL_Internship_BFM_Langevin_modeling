@@ -20,7 +20,7 @@ import time
 
 
 class DiffusionSimulation2:
-    def __init__(self,frequency = 26, torque = 10, dt=1e-5):
+    def __init__(self,frequency = 10, torque = 10, dt=1e-5):
         # Constants
         self.T_K = 300
         self.k_b = 1.3806452e-23
@@ -187,6 +187,32 @@ class DiffusionSimulation2:
             else:
                 continue
         return bins
+    
+    def mean_msd_and_time_axis(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
+        msd_matrix = [] 
+        max_lagtime = int(len(trajs[0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.parallel_no_chunk(trajs[i], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
+        return time_axis,mean_msd
+    
+    def integrand1(self, x, amplitude):
+        return np.exp(self.tilted_periodic_potential(amplitude, x))
+    
+    def factor1(self, amplitude):  
+        result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
+        return result
+    
+    def lifson_jackson_noforce(self, amplitude): #Meet einstein coeff at 0 barrier
+        lifson_jackson1 = self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
+        return lifson_jackson1 
+    
+    def lifson_jackson_force(self, amplitude):
+        lifson_jackson2 = (self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))) * (np.sinh(self.torque*(2*np.pi / self.frequency)/2))/(self.torque*(2*np.pi / self.frequency)/2)
+        return lifson_jackson2
                 
                 
         
