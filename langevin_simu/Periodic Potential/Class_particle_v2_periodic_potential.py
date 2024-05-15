@@ -347,9 +347,9 @@ class DiffusionSimulation2:
         trajectories_box = []
         mean_msd_box = []
         for A in ampl_range:
-            trajs = self.run_parallel_numba(repetitions = nb_traj, Amplitude = A, npts = npts)
+            trajs = self.run_parallel_numba(n_jobs=1,repetitions = nb_traj, Amplitude = A, npts = npts)
             trajectories_box.append()
-            time_axis,mean_msd = self.mean_msd_and_time_numba(trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = nb_traj)
+            time_axis,mean_msd = self.mean_msd_and_time_numba(trajs, n_jobs=1, time_end=1/4, msd_nbpt = 2000, nb_traj = nb_traj)
         
         
         
