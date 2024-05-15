@@ -18,9 +18,10 @@ from joblib import Parallel, delayed
 import time
 from scipy.interpolate import interp1d
 import scipy
+from numdifftools import Derivative
 
 class DiffusionSimulation2:
-    def __init__(self,frequency = 26, torque = 0, dt = None):
+    def __init__(self,frequency = 10, torque = 0, dt = None, x0 = 0, analytical = True):
         # Constants
         self.T_K = 300
         self.k_b = 1.3806452e-23
@@ -35,14 +36,30 @@ class DiffusionSimulation2:
         self.rotational_einstein_diff = self.k_b * self.T_K / self.rotational_drag
         self.dt_s = dt # tau
         self.frequency = frequency
-        self.space_step = 1e-12
+        self.space_step = 1e-8
         self.torque = torque*self.T_K*self.k_b
+        self.x0 = x0
+        self.analytical = analytical
         
     def tilted_periodic_potential(self, A, x):
         return self.torque*x + A * np.sin(x * self.frequency)
-        
+    
+    def potential_analytic_derivative(self,A,x):
+        return self.torque + A * self.frequency*np.cos(x * self.frequency)
+    
+    def potential_derivative(self, A, x, dx=1e-6):
+        # Compute the derivative numerically using finite differences
+        derivative_at_x = (self.tilted_periodic_potential(A, x + dx) - self.tilted_periodic_potential(A, x - dx)) / (2 * dx)
+        return derivative_at_x
+    
+    def box_muller(self,N):
+        u1 = np.random.rand(N)
+        u2 = np.random.rand(N)
+        z = np.sqrt(-2 * np.log(u1)) * np.cos(2 * np.pi * u2)
+        return z
+
     def generate_seq(self, N):
-        W_seq = np.random.normal(0, 1, N)
+        W_seq = self.box_muller(N)
         return W_seq
 
     def main_traj(self, N, A):
@@ -55,17 +72,23 @@ class DiffusionSimulation2:
         Returns:
             array: angular trajectory
         """
+        
         w = self.generate_seq(N)
         A *= self.k_b * self.T_K
-        x = 0
-        positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x - self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
-        np.insert(positions,[0],np.pi/2)
+        x0 = self.x0
+        x = x0
+        if self.analytical == False : 
+            positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s * self.potential_derivative(A,x) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
+        else :
+            positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s * self.potential_analytic_derivative(A,x) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
+
+        np.insert(positions,[0],x0)
         positions = np.array(positions) 
         
         positions.astype(np.float32)
         return positions
     
-    def main_traj_linear(self,N,A):
+    def main_traj_debug(self,N,A):
         """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
 
         Args:
@@ -77,17 +100,22 @@ class DiffusionSimulation2:
         """
         w = self.generate_seq(N)
         A *= self.k_b * self.T_K
-        x = 0
+        x0 = 0
+        x = self.x0
         positions = []
         deter = []
         stocha = []
         for i in range(N):
-            deterministic = (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x - self.space_step)) / (2*self.space_step))
+            positions.append(x)    
+            if self.analytical == False : 
+                deterministic = (1 / self.rotational_drag) * self.dt_s *self.potential_derivative( A, x)
+            if self.analytical == True :
+                deterministic = (1 / self.rotational_drag) * self.dt_s *self.potential_analytic_derivative( A, x)
             stochastic = np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i] 
             x += -deterministic + stochastic
             deter.append(deterministic)
             stocha.append(stochastic)
-            positions.append(x) 
+                
         return positions,stocha,deter
     
     def regular_linear_msd(self, traj = None, time_end = 1/4, time_skip = 100):
@@ -112,7 +140,7 @@ class DiffusionSimulation2:
         return np.array(msd)  
     
     
-    def run_parallel(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
+    def run_parallel(self, repetitions=None, n_jobs=-1, npts = None, Amplitude = 0, torque = 0):
         ''' parallel computations of generate_traj() 
             parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
         '''
@@ -124,16 +152,16 @@ class DiffusionSimulation2:
         np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
     
-    def run_parallel_linear(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
+    def run_parallel_debug(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
         ''' parallel computations of generate_traj() 
             parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
         '''
         # Parallel:
         print(f'run_serial_parallel(): Parallel working...')
         t0 = time.time()
-        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj_linear)(N = npts,A = Amplitude) for i in range(repetitions))
+        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj_debug)(N = npts,A = Amplitude) for i in range(repetitions))
         print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
+        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}_points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
     
     
@@ -198,6 +226,17 @@ class DiffusionSimulation2:
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
         return time_axis,mean_msd
+    
+    def mean_msd_and_time_axis_debug(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
+        msd_matrix = []
+        max_lagtime = int(len(trajs[0][0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.parallel_no_chunk(trajs[i][0], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
+        return time_axis,mean_msd
 
     """
     Lifson and Jackson methods
@@ -214,8 +253,7 @@ class DiffusionSimulation2:
         lifson_jackson1 = self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
         return lifson_jackson1 
         
-        
-        
+
 def compare_ampli(ampli_min,ampli_max,dt):
     total_time = int(1e8*1e-5)
     for A in range(ampli_min,ampli_max):
@@ -290,4 +328,5 @@ def asdefaveri_msd(A,dt):
     print('D_eff = ',D_eff)
     stationary_state = defaveri_stationary(A) 
     return absciss,norm_msd,D_fit,D_eff,shift,stationary_state,a
+
 

@@ -20,7 +20,7 @@ D = 0.16480238117707385
 
     
 def plot_trajs(j):
-    data = [np.load(f'trajectories_100000,nb_traj_12points_amplitude_{A}kT,frequency_10_dt_0.0001_torque_0kT.npy') for A in range(1,10)]
+    data = [np.load(f'trajectories_10000000,nb_traj_20points_amplitude_{A}kT,frequency_10_dt_0.0001_torque_0kT.npy') for A in range(1,10)]
     print('aaaaaaaaaaaaaaaaaa',len(data))
     trajs = data[0][j]
     X = 1000
@@ -33,8 +33,6 @@ def plot_trajs(j):
     plt.legend()
     plt.show()
 
-for j in range(8):
-    plot_trajs(j)
 
 def mean_velocity(trajs):
     mean_vel = []
@@ -46,9 +44,24 @@ def mean_velocity(trajs):
     mean_vel = np.mean(mean_vel,axis=0)
     return mean_vel
 
-
-
-
+def why_stonks(X):
+    trajs8l = np.load(f'trajectories_10000,nb_traj_35points_amplitude_7kT,frequency_10_dt_0.0001_torque_0kT.npy')
+    m_sto = []
+    m_det = []
+    m_traj = []
+    for traj in trajs8l:
+        mean_traj = np.mean(traj)
+        mean_cum_stocha = np.mean(np.cumsum(traj[1][:X]))
+        mean_cum_det = np.mean(np.cumsum(traj[2][:X]))
+        m_sto.append(mean_cum_stocha)
+        m_det.append(mean_cum_det)
+        m_traj.append(mean_traj)
+    plt.plot(m_sto,color='green')
+    plt.plot(m_det)
+    plt.plot(m_traj,color='red')
+    print(np.mean(m_sto))
+    print(np.mean(m_det))
+    
 def plot_velocity():
     X = 1000
     trajectories = [np.load(f'trajectories_1000000,nb_traj_10points_amplitude_{A}kT,frequency_10_dt_0.0001_torque_0kT.npy') for A in range(5)]
@@ -62,7 +75,7 @@ def plot_velocity():
         
         
         
-        
+
         
         
         

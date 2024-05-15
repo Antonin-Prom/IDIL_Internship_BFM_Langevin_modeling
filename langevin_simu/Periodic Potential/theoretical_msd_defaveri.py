@@ -16,7 +16,7 @@ D0 = p.rotational_einstein_diff
 def integral_at_t(t):
     
     def integrand(y, amplitude):
-        return y**2 * p.integrand1(y * np.sqrt(t), amplitude) * np.exp(-(y**2) / (4 * D_eff)) / (4 * np.pi * D0)
+        return y**2 * p.integrand1(-y * np.sqrt(t), amplitude) * np.exp(-(y**2) / (4 * D_eff)) / np.sqrt(4 * np.pi * D0)
     
     low_lim = -np.pi / np.sqrt(t)
     high_lim = np.pi / np.sqrt(t)
@@ -30,7 +30,7 @@ def integral_at_t(t):
     
     return t * results(amplitude)
     
-len_traj = 1e6
+len_traj = 1e8
 max_lagtime = int(0.25 * len_traj)
 msd_nbpt = 1000
 total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, np.log10(max_lagtime), msd_nbpt))])
@@ -41,5 +41,5 @@ msd = []
 for lag in total_lag_time:
     msd.append(integral_at_t(lag))
     
-plt.plot(total_lag_time * p.dt_s, msd)
+plt.plot(total_lag_time * p.dt_s * D0 / 100, msd/100)
 plt.show()
