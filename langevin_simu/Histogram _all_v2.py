@@ -185,13 +185,13 @@ def plot_histograms(npts=1e6,repetitions=1000,free=False,drift=False,periodic=Fa
         else:
             t1 = time.time()
             trajs = np.load(f'{file_name}')
-            print(f'Load done in {time.time() - t1:.1f} s ')
+            
         #trajs = np.unwrap(trajs)
         matrixes = []
         for t in time_select:
             m = matrix_at_t(trajs,t)
             matrixes.append(m)
-
+        print(f'Load done in {time.time() - t1:.1f} s ')
             
     if drift == True:
         drift = LangevinSimulator(dt=1e-4,torque=10)
@@ -244,7 +244,7 @@ def plot_histograms(npts=1e6,repetitions=1000,free=False,drift=False,periodic=Fa
     axs = axs.flatten()
 
     for idx, m in enumerate(matrixes):
-        axs[idx].hist(m, bins=int(repetitions), alpha=0.7)
+        axs[idx].hist(m, bins=int(repetitions), alpha=0.7,density=True)
         (mu, sigma) = norm.fit(m)
         xmin, xmax = axs[idx].get_xlim()
         x = np.linspace(xmin, xmax, 100)
