@@ -18,7 +18,6 @@ from joblib import Parallel, delayed
 import time
 from scipy.interpolate import interp1d
 import scipy
-from numdifftools import Derivative
 from numba import njit
 
 

@@ -8,7 +8,6 @@ from joblib import Parallel, delayed
 import time
 from scipy.interpolate import interp1d
 import scipy
-from numdifftools import Derivative
 from numba import njit
 from matplotlib.lines import Line2D
 
@@ -366,7 +365,7 @@ class LangevinSimulator:
             self.torque = torque_range[j]
             for i in range(len(ampl_range)):
                 U = self.make_potential_sin(ampl_range[i]) 
-                absciss = time_axis_box[i] * D / (a * a)
+                absciss = time_axis_box[i] #* D / (a * a)
                 norm_msd = mean_msd_box[i] #/ (a * a)
                     
                 min_absciss_value = 0  # Adjust this value as needed
@@ -389,9 +388,9 @@ class LangevinSimulator:
                 plt.plot(time_axis_box[i][int((len(absciss)/frac)):], parabolic_msd(time_axis_box[i],D_eff,v_eff)[int((len(absciss)/frac)):],  linewidth=1, color=colors[i])                
                 
                 stationary_state = defaveri_stationary(ampl_range[i])
-                num_points = 30
+                num_points = 60
                 indices = np.linspace(0, len(norm_msd) - 1, num_points).astype(int)
-                plt.scatter(time_axis_box[i][indices], norm_msd[indices], color=colors[i], marker=markers[j], s=50)
+                plt.scatter(time_axis_box[i][indices], norm_msd[indices], color=colors[i], marker=markers[j], s=10)
     
         plt.xlabel(r'${Dt}/{a^2}$', fontsize=16)
         plt.ylabel(r'${\langle \theta^2 \rangle}/{a^2}$', fontsize=16)
@@ -416,7 +415,17 @@ class LangevinSimulator:
         plt.show()
  
 
-ampl_range = [0,2,4,6]
+
+
+
+
+
+
+ampl_range = [0,0.5,1,2]
+"""
+tor=0
+J = LangevinSimulator(dt=1e-4, torque = tor)
+J.normalised_loglog_msd_fit(ampl_range,int(1e7))
 
 tor = 10
 J = LangevinSimulator(dt=1e-4, torque = tor)
@@ -424,22 +433,16 @@ J.normalised_loglog_msd_fit(ampl_range,int(1e7))
 tor = 20
 J = LangevinSimulator(dt=1e-4, torque = tor)
 J.normalised_loglog_msd_fit(ampl_range,int(1e7))
-
-
-
 """
-J = LangevinSimulator(dt=1e-4, torque = 0)
-ampl_range = [0,5,10,20]
-
-t0,msd0 = np.load('To_plot_t,10000000npts_msd_0_torque_0kT_dt=0.0001,cylindric.npy')
-t10,msd10 = np.load('To_plot_t,10000000npts_msd_0_torque_10kT_dt=0.0001,cylindric.npy')
-t20,msd20 = np.load('To_plot_t,10000000npts_msd_0_torque_20kT_dt=0.0001,cylindric.npy')
-
+t0,msd0 = np.load('To_plot_t,10000000npts_msd_torque_0kT_dt=0.0001,cylindric.npy')
+t10,msd10 = np.load('To_plot_t,10000000npts_msd_torque_10kT_dt=0.0001,cylindric.npy')
+t20,msd20 = np.load('To_plot_t,10000000npts_msd_torque_20kT_dt=0.0001,cylindric.npy')
+J = LangevinSimulator(dt=1e-4,torque=10)
 t_boxbox = [t0,t10,t20]
 msd_boxbox = [msd0,msd10,msd20]
 torque_range=[0,10,20]
 J.fit_and_plot_msd(t_boxbox,msd_boxbox,ampl_range,torque_range)
-"""
+
 
 
 
