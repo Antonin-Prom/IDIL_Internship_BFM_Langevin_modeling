@@ -3,43 +3,53 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sys
 #sys.path.append('/home/antonin/Documents/GitHub/IDIL_Internship_BFM_Langevin_modeling/langevin_simu/')
-from Class_particle_v2_periodic_potential import *
+from Langevin_Class_v2 import *
 from scipy.stats import norm
 from scipy.optimize import curve_fit
 from scipy.special import jv
+from scipy.integrate import simps
 
-p = DiffusionSimulation2(dt=0.001, frequency=10, torque=0)
-amplitude = 3
-D_eff = p.lifson_jackson_noforce(amplitude)
-D0 = p.rotational_einstein_diff
+p = LangevinSimulator(dt=0.0001, frequency=10, torque=0)
+amplitude = 6
+D_eff = p.lifson_jackson(amplitude)
+D0 = p.D
+
 
 def integral_at_t(t):
     
     def integrand(y, amplitude):
         return y**2 * p.integrand1(-y * np.sqrt(t), amplitude) * np.exp(-(y**2) / (4 * D_eff)) / np.sqrt(4 * np.pi * D0)
     
-    low_lim = -np.pi / np.sqrt(t)
-    high_lim = np.pi / np.sqrt(t)
+    lim = 4
+    low_lim = -lim*np.pi / np.sqrt(t)
+    high_lim = lim*np.pi / np.sqrt(t)
     
-    angle_space = np.linspace(-np.pi, np.pi, 1000)
+    angle_space = np.linspace(-lim*np.pi, lim*np.pi, 10000)
     y = angle_space / np.sqrt(t)
     
     def results(amplitude):  
         result, _ = quad(integrand, low_lim, high_lim, args=(amplitude,))
-        return result
-    
+        return result    
     return t * results(amplitude)
     
-len_traj = 1e8
+len_traj = 1e15
 max_lagtime = int(0.25 * len_traj)
-msd_nbpt = 1000
-total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, np.log10(max_lagtime), msd_nbpt))])
+msd_nbpt = 500
+total_lag_time = np.array(np.unique([int(lag) for lag in np.floor(np.logspace(0, np.log10(max_lagtime), msd_nbpt))]))* p.dt
 msd = []
 
 
 
 for lag in total_lag_time:
     msd.append(integral_at_t(lag))
+msd = np.array(msd)
     
-plt.plot(total_lag_time * p.dt_s * D0 / 100, msd/100)
+plt.loglog(total_lag_time  * D0 / 100, msd/100)
+plt.loglog(total_lag_time  * D0 / 100, (2*D_eff*total_lag_time)/100,color='r',linestyle='--')
+plt.xlabel(r'$\frac{Dt}{a^2}$',fontsize=16)
+plt.ylabel(r'$\frac{\langle \theta^2 \rangle}{a^2}$',fontsize=10)
+plt.title('Analytical integration dt=1e-4,Ampl = 6, red = 2*D_eff*t')
 plt.show()
+
+
+

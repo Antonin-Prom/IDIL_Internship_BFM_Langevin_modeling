@@ -292,19 +292,21 @@ class LangevinSimulator:
     """
 
     def integrand1(self, x, amplitude):
-        return np.exp(self.analytical_potential(x, amplitude))
+        return np.exp(amplitude*np.cos(x*self.frequency))
     
     def factor1(self, amplitude):  
         result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
         return result
     
-    def lifson_jackson_noforce(self, amplitude): #Meet einstein coeff at 0 barrier
-        lifson_jackson1 = self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
-        return lifson_jackson1     
-    
-    def lifson_jackson_force(self, amplitude, F):
-        lifson_jackson2 = (self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))) * ((np.sinh(F*(2*np.pi / self.frequency)/2))/(F*(2*np.pi / self.frequency)/2))**2
-        return lifson_jackson2
+    def lifson_jackson(self, amplitude): #Meet einstein coeff at 0 barrier
+        if self.torque == 0:
+            lifson_jackson1 = self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
+            return lifson_jackson1
+        else:
+            F = self.torque/(2*np.pi) #KT already taken in acount
+            lifson_jackson2 = (self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))) * ((np.sinh(F*(2*np.pi / self.frequency)/2))/(F*(2*np.pi / self.frequency)/2))**2
+            return lifson_jackson2            
+ 
     
     
     def normalised_loglog_msd_fit(self,ampl_range,npts):
@@ -364,40 +366,41 @@ class LangevinSimulator:
             time_axis_box = time_axis_boxbox[j]
             mean_msd_box = mean_msd_boxbox[j]
             self.torque = torque_range[j]
-            for i in range(len(ampl_range)):
-                U = self.make_potential_sin(ampl_range[i]) 
-                absciss = time_axis_box[i] * D / (a * a)
-                norm_msd = mean_msd_box[i] #/ (a * a)
-                    
-                min_absciss_value = 0  # Adjust this value as needed
-                window_indices = np.where(absciss > min_absciss_value)[0]
-                frac = 3
-                F = self.torque/(2*np.pi)
-                v_eff = F*self.KT/self.gamma
+            F = self.KT*self.torque/(2*np.pi)
+            v_eff = F/self.gamma
+            print('JJJJJJJ,V_eff',j,v_eff)
+            for i, A in enumerate(ampl_range):
+                U = self.make_potential_sin(A)
+                absciss = time_axis_box[i] * self.D / (a * a)
+                norm_msd = mean_msd_box[i]
 
-                if j==0:
-                    D_eff = self.lifson_jackson_noforce(ampl_range[i])        
-                else:
-                    D_eff = self.lifson_jackson_force(ampl_range[i],F)
-    
-                popt, pcov = scipy.optimize.curve_fit(parabolic_msd, time_axis_box[i][window_indices], mean_msd_box[i][window_indices])
+                min_absciss_value = 0
+                window_indices = np.where(absciss > min_absciss_value)[0]
+
+                D_eff = self.lifson_jackson(A)
+
+                popt, _ = scipy.optimize.curve_fit(parabolic_msd, time_axis_box[i][window_indices], mean_msd_box[i][window_indices])
                 D_fit = popt[0]
-                
-                print(f'For A = {ampl_range[i]} and torque = {self.torque}kT D_fit  = ', D_fit)
-                print('D_eff = ', D_eff)
+
+                print(f'For A = {A} and torque = {self.torque}kT, D_fit = {D_fit}')
+                print(f'D_eff = {D_eff}')
+
                 frac = 1.5
-                plt.plot(time_axis_box[i][int((len(absciss)/frac)):], parabolic_msd(time_axis_box[i],D_eff,v_eff)[int((len(absciss)/frac)):],  linewidth=1, color=colors[i])                
-                
-                stationary_state = defaveri_stationary(ampl_range[i])
-                num_points = 30
+                if A != 0:
+                    plt.plot(time_axis_box[i][int(len(absciss)/frac):], (parabolic_msd(time_axis_box[i], D_eff, v_eff)/A**2)[int(len(absciss)/frac):], linewidth=1, color=colors[i])
+                else:
+                    plt.plot(time_axis_box[i][int(len(absciss)/frac):], (parabolic_msd(time_axis_box[i], D_eff, v_eff)[int(len(absciss)/frac):]), linewidth=1, color=colors[i])
+
+                num_points = 20
                 indices = np.linspace(0, len(norm_msd) - 1, num_points).astype(int)
-                plt.scatter(time_axis_box[i][indices], norm_msd[indices], color=colors[i], marker=markers[j], s=50)
+                plt.scatter(time_axis_box[i][indices], norm_msd[indices], color=colors[i], marker=markers[j], s=20)
+        #plt.scatter(time_axis_box[i][indices], norm_msd[indices], color=colors[i], marker=markers[j], s=20)
     
         plt.xlabel(r'${Dt}/{a^2}$', fontsize=16)
         plt.ylabel(r'${\langle \theta^2 \rangle}/{a^2}$', fontsize=16)
         plt.xscale('log')
         plt.yscale('log')
-        plt.ylim(0.00001, 1000000)
+        #plt.ylim(0.00001, 1000000)
         # Custom legend for amplitudes (colors)
         
         legend_amplitudes = [Line2D([0], [0], color=colors[i], lw=4, label=f'A={ampl_range[i]:.1f} KT') for i in range(len(ampl_range))]
@@ -415,31 +418,33 @@ class LangevinSimulator:
         plt.savefig('msd_plot_rod.png', dpi=300)
         plt.show()
  
-
-ampl_range = [0,2,4,6]
-
-tor = 10
-J = LangevinSimulator(dt=1e-4, torque = tor)
-J.normalised_loglog_msd_fit(ampl_range,int(1e7))
-tor = 20
-J = LangevinSimulator(dt=1e-4, torque = tor)
-J.normalised_loglog_msd_fit(ampl_range,int(1e7))
-
-
+ampl_range = [0,0.5,1,1.5,2]    
 
 """
-J = LangevinSimulator(dt=1e-4, torque = 0)
-ampl_range = [0,5,10,20]
+tor = 0
+J = LangevinSimulator(dt=1e-4, torque = tor)
+J.normalised_loglog_msd_fit(ampl_range,int(1e8))
+tor = 10
+J = LangevinSimulator(dt=1e-4, torque = tor)
+J.normalised_loglog_msd_fit(ampl_range,int(1e8))
+tor = 20
+J = LangevinSimulator(dt=1e-4, torque = tor)
+J.normalised_loglog_msd_fit(ampl_range,int(1e8))
 
-t0,msd0 = np.load('To_plot_t,10000000npts_msd_0_torque_0kT_dt=0.0001,cylindric.npy')
-t10,msd10 = np.load('To_plot_t,10000000npts_msd_0_torque_10kT_dt=0.0001,cylindric.npy')
-t20,msd20 = np.load('To_plot_t,10000000npts_msd_0_torque_20kT_dt=0.0001,cylindric.npy')
+"""
+
+J = LangevinSimulator(dt=1e-4, torque = 0)
+
+
+t0,msd0 = np.load('To_plot_t,10000000npts_msd_torque_0kT_dt=0.0001,cylindric.npy')
+t10,msd10 = np.load('To_plot_t,10000000npts_msd_torque_10kT_dt=0.0001,cylindric.npy')
+t20,msd20 = np.load('To_plot_t,10000000npts_msd_torque_20kT_dt=0.0001,cylindric.npy')
 
 t_boxbox = [t0,t10,t20]
 msd_boxbox = [msd0,msd10,msd20]
 torque_range=[0,10,20]
 J.fit_and_plot_msd(t_boxbox,msd_boxbox,ampl_range,torque_range)
-"""
+
 
 
 
