@@ -27,6 +27,11 @@ def integral_at_t(t):
     angle_space = np.linspace(-lim*np.pi, lim*np.pi, 10000)
     y = angle_space / np.sqrt(t)
     
+    def calculate_msd(t, amplitude):
+        integrand_func = lambda y: integrand(y, t, amplitude)
+        integral_value, _ = quad(integrand_func, -np.pi, np.pi)
+        return 2 * D_eff * t * integral_value
+
     def results(amplitude):  
         result, _ = quad(integrand, low_lim, high_lim, args=(amplitude,))
         return result    

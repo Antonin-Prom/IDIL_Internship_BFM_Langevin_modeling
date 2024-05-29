@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+Created on Wed May 29 15:57:08 2024
+
+@author: CBS
+"""
+# -*- coding: utf-8 -*-
 
 import numpy as np
 from scipy.integrate import quad
@@ -42,9 +48,9 @@ class LangevinSimulator:
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
-        #self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.L = 100e-9   #cylinder_length
-        self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
+        #self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
         self.tau = self.moment_inertia / self.gamma
         self.D = self.KT / self.gamma
@@ -316,11 +322,11 @@ class LangevinSimulator:
  
     
     
-    def normalised_loglog_msd_fit(self,ampl_range,npts,msd_nbpt):
+    def normalised_loglog_msd_fit(self,ampl_range,npts,msd_nbpt,nb_traj):
         
         time_box,mean_msd_box,trajectories_box = self.full_auto_trajs_mean_msd(ampl_range = ampl_range,nb_traj = 20, npts = npts,msd_nbpt=msd_nbpt )
         time_box,mean_msd_box = np.asarray(time_box, dtype=np.float32),np.asarray(mean_msd_box, dtype=np.float32)
-        np.save(f'ampl_range({ampl_range[0]},{ampl_range[1]},{ampl_range[2]},{ampl_range[3]}),{npts}npts_msd_torque_{self.torque}kT_dt={self.dt},cylindric',[time_box,mean_msd_box])
+        np.save(f'ampl_range({ampl_range[0]},{ampl_range[1]},{ampl_range[2]},{ampl_range[3]}),{npts}npts_msd_torque_{self.torque}kT_dt={self.dt},bead',[time_box,mean_msd_box])
     
     def drift_velocity(self,A=None,simu=True):
         Bp = self.full_factor(A)
@@ -390,55 +396,49 @@ class LangevinSimulator:
         for j in range(len(torque_range)):
             time_axis_box = time_axis_boxbox[j]
             mean_msd_box = mean_msd_boxbox[j]
-            self.torque = torque_range[j]
-            F = self.KT*self.torque/(2*np.pi)
-            v_eff = F/self.gamma
-            print('JJJJJJJ,V_eff',j,v_eff)
+
             for i, A in enumerate(ampl_range):
-                U = self.make_potential_sin(A)
-                absciss = time_axis_box[i] * self.D / (a * a)
-                norm_msd = mean_msd_box[i]/ (a * a)
-                print('D = ',self.D)
-                print('D/a² = ',self.D / (a * a))
-                min_absciss_value = 0
-                window_indices = np.where(absciss > min_absciss_value)[0]
+                if j==0 and A !=1 :
+                    U = self.make_potential_sin(A)
+                    absciss = time_axis_box[i] * self.D / (a * a)
+                    norm_msd = mean_msd_box[i]/ (a * a)
+                    
+                    min_absciss_value = 10
+                    window_indices = np.where(absciss > min_absciss_value)[0]
+        
+                    D_eff = self.lifson_jackson(A)
+        
+                    popt, _ = scipy.optimize.curve_fit(linear_D, time_axis_box[i][window_indices], mean_msd_box[i][window_indices])
+                    D_fit = popt[0]
+        
+                    print(f'For A = {A} and torque = {self.torque}kT, D_fit = {D_fit}')
+                    print(f'D_eff = {D_eff}')
+                    
+                    
+                    if A == 5:
+                        stationary_state = defaveri_stationary(A)
+                        plt.plot(absciss,stationary_state*np.ones(len(absciss)),linestyle ='--',color='r')
+                    plt.plot(absciss, (linear_D(time_axis_box[i], D_eff))/(a*a), linewidth=1.5, color='black',linestyle='--')
+                
+                    num_points = 100
+                    indices = np.linspace(0, len(norm_msd) - 1, num_points).astype(int)
 
-                D_eff = self.lifson_jackson(A)
-
-                popt, _ = scipy.optimize.curve_fit(parabolic_msd, time_axis_box[i][window_indices], mean_msd_box[i][window_indices])
-                D_fit = popt[0]
-
-                print(f'For A = {A} and torque = {self.torque}kT, D_fit = {D_fit}')
-                print(f'D_eff = {D_eff}')
-
-                frac = 1.5
-                """
-                if A != 0:
-                    plt.plot(time_axis_box[i][int(len(absciss)/frac):], (parabolic_msd(time_axis_box[i], D_eff, v_eff)/A**2)[int(len(absciss)/frac):], linewidth=1, color=colors[i])
-                else:
-                    plt.plot(time_axis_box[i][int(len(absciss)/frac):], (parabolic_msd(time_axis_box[i], D_eff, v_eff)[int(len(absciss)/frac):]), linewidth=1, color=colors[i])
-                """
-                num_points = 50
-                indices = np.linspace(0, len(norm_msd) - 1, num_points).astype(int)
-                plt.plot(absciss[indices], norm_msd[indices], color=colors[i],linewidth = 0.5)
-                plt.scatter(absciss[indices], norm_msd[indices], color=colors[i], marker=markers[j], s=20)
-        #plt.scatter(time_axis_box[i][indices], norm_msd[indices], color=colors[i], marker=markers[j], s=20)
-    
+                    plt.scatter(absciss[indices], norm_msd[indices], color=colors[i], marker=markers[j], s=10)
         plt.xlabel(r'${Dt}/{a^2}$', fontsize=16)
         plt.ylabel(r'${\langle \theta^2 \rangle}/{a^2}$', fontsize=16)
         plt.xscale('log')
         plt.yscale('log')
-        #plt.xlim(0.00005,10)
-        #plt.ylim(0.0001, 1000000)
+
+        plt.ylim(0.0001, 10000)
         # Custom legend for amplitudes (colors)
         
-        legend_amplitudes = [Line2D([0], [0], color=colors[i], lw=4, label=f'A={ampl_range[i]:.1f} KT') for i in range(len(ampl_range))]
+        legend_amplitudes = [ Line2D([0], [0], color=colors[i], lw=4, label=f'A={ampl_range[i]:.1f} KT') for i in range(len(ampl_range)) if i != 1 ]
         
         # Custom legend for torques (markers)
         legend_torques = [Line2D([0], [0], color='black', marker=markers[j], linestyle='None', markersize=10, label=f'Torque={torque_range[j]}') for j in range(len(torque_range))]
         
         # Combine the legends
-        plt.legend(handles=legend_amplitudes + legend_torques, fontsize=8)
+        plt.legend(handles=legend_amplitudes, fontsize=8)
 
         #plt.tick_params(axis='both', which='major', labelsize=12)
         plt.tight_layout()
@@ -447,41 +447,24 @@ class LangevinSimulator:
         plt.savefig('msd_plot_rod.png', dpi=300)
         plt.show()
  
-ampl_range = [0,5,10,20]    
-dt = 1e-5
+ampl_range = [0,1,3,5]    
+dt = 1e-4
 npts = int(1e7)
 
-"""
-tor = 0
-J = LangevinSimulator(dt=dt, torque = tor)
-J.normalised_loglog_msd_fit(ampl_range,npts,msd_nbpt=500)
 
-tor = 10
+def make_msd():
+    tor = 0
+    J = LangevinSimulator(dt=dt, torque = tor)
+    J.normalised_loglog_msd_fit(ampl_range,npts,msd_nbpt=500,nb_traj=40)
 
-J = LangevinSimulator(dt=dt, torque = tor)
-J.normalised_loglog_msd_fit(ampl_range,npts,msd_nbpt=500)
-
-
-tor = 20
-
-J = LangevinSimulator(dt=dt, torque = tor)
-J.normalised_loglog_msd_fit(ampl_range,npts,msd_nbpt=500)
-
-
-"""
-
-J = LangevinSimulator(dt=dt, torque = 0)
-
-
-t0,msd0 = np.load('ampl_range(0,5,10,20),10000000npts_msd_torque_0kT_dt=1e-05.npy')
-t10,msd10 = np.load('ampl_range(0,5,10,20),10000000npts_msd_torque_10kT_dt=1e-05.npy')
-t20,msd20 = np.load('ampl_range(0,5,10,20),10000000npts_msd_torque_20kT_dt=1e-05.npy')
-
-t_boxbox = [t0,t10,t20]
-msd_boxbox = [msd0,msd10,msd20]
-torque_range=[0,10,20]
-J.fit_and_plot_msd(t_boxbox,msd_boxbox,ampl_range,torque_range)
-
+def plot_msd():
+    J = LangevinSimulator(dt=dt, torque = 0)
+    t0,msd0 = np.load('ampl_range(0,1,3,5),10000000npts_msd_torque_0kT_dt=0.0001,bead.npy')
+    t_boxbox = [t0]
+    msd_boxbox = [msd0]
+    torque_range=[0]
+    J.fit_and_plot_msd(t_boxbox,msd_boxbox,ampl_range,torque_range)
+plot_msd()
 
 
 
