@@ -37,6 +37,10 @@ def integral_at_t(t):
         return result    
     return t * results(amplitude)
     
+
+
+
+
 len_traj = 1e15
 max_lagtime = int(0.25 * len_traj)
 msd_nbpt = 500

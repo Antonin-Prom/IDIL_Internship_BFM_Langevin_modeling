@@ -368,20 +368,30 @@ class LangevinSimulator:
         
         D = self.D    
         a = 2 * np.pi / self.frequency
+        P = 2
+              
         
-        def defaveri_stationary(A):
-            X = np.linspace(0, a, 1000)
-            Y = boltz_exp(A, X)
-            Z = np.mean(Y)
-            return (np.mean((X ** 2) * Y) / Z)   
+        def expU(x, A):
+            return np.exp(-A*np.sin(x*self.frequency))
         
-        def boltz_exp(A, x):
-            return np.exp(self.analytical_potential(x, A))
+        def XXboltz_exp(x, A):
+            return (x**2)*expU(x, A)
+
+        def defaveri_stationary_integral(A):
             
+            I,_ = quad(XXboltz_exp, -a/P, a/P, args=(A)) #By default, quad integrates with respect to the first argument of the provided function
+            Z,_ = quad(expU, -a/P, a/P, args=(A))
+            return (I / Z)   
+        
+        def defaveri_stationary_mean(A):
+            X = np.linspace(-a/P,a/P,1000)
+            Y = expU(X,A)
+            Z = np.mean(Y)
+            return (np.mean((X**2)*Y)/Z)   
+               
         def linear_D(t, D):
             return (2 * D * t)
-    
-            
+           
         def parabolic_msd(t,D,v_eff):
             return (2 * D * t) + (v_eff**2)*t**2 
         
@@ -398,10 +408,10 @@ class LangevinSimulator:
             mean_msd_box = mean_msd_boxbox[j]
 
             for i, A in enumerate(ampl_range):
-                if j==0 and A !=1 :
+                if j==0 :
                     U = self.make_potential_sin(A)
-                    absciss = time_axis_box[i] * self.D / (a * a)
-                    norm_msd = mean_msd_box[i]/ (a * a)
+                    absciss = time_axis_box[i]  * self.D / (a * a)
+                    norm_msd = mean_msd_box[i] / (a * a)
                     
                     min_absciss_value = 10
                     window_indices = np.where(absciss > min_absciss_value)[0]
@@ -414,16 +424,17 @@ class LangevinSimulator:
                     print(f'For A = {A} and torque = {self.torque}kT, D_fit = {D_fit}')
                     print(f'D_eff = {D_eff}')
                     
+                    stationary_state = defaveri_stationary_mean(A) 
+                    plt.plot(absciss,(stationary_state/(a*a))*np.ones(len(absciss)),linestyle ='--',color='r')
                     
-                    if A == 5:
-                        stationary_state = defaveri_stationary(A)
-                        plt.plot(absciss,stationary_state*np.ones(len(absciss)),linestyle ='--',color='r')
+                    stationary_state = defaveri_stationary_integral(A) 
+                    plt.plot(absciss,(stationary_state/(a*a))*np.ones(len(absciss)),linestyle ='--',color='g')
                     plt.plot(absciss, (linear_D(time_axis_box[i], D_eff))/(a*a), linewidth=1.5, color='black',linestyle='--')
                 
                     num_points = 100
                     indices = np.linspace(0, len(norm_msd) - 1, num_points).astype(int)
-
                     plt.scatter(absciss[indices], norm_msd[indices], color=colors[i], marker=markers[j], s=10)
+                    
         plt.xlabel(r'${Dt}/{a^2}$', fontsize=16)
         plt.ylabel(r'${\langle \theta^2 \rangle}/{a^2}$', fontsize=16)
         plt.xscale('log')
@@ -432,7 +443,7 @@ class LangevinSimulator:
         plt.ylim(0.0001, 10000)
         # Custom legend for amplitudes (colors)
         
-        legend_amplitudes = [ Line2D([0], [0], color=colors[i], lw=4, label=f'A={ampl_range[i]:.1f} KT') for i in range(len(ampl_range)) if i != 1 ]
+        legend_amplitudes = [ Line2D([0], [0], color=colors[i], lw=4, label=f'A={2*ampl_range[i]:.1f} KT') for i in range(len(ampl_range)) ]
         
         # Custom legend for torques (markers)
         legend_torques = [Line2D([0], [0], color='black', marker=markers[j], linestyle='None', markersize=10, label=f'Torque={torque_range[j]}') for j in range(len(torque_range))]
@@ -447,7 +458,7 @@ class LangevinSimulator:
         plt.savefig('msd_plot_rod.png', dpi=300)
         plt.show()
  
-ampl_range = [0,1,3,5]    
+ampl_range = [0,2.5,5,10]    
 dt = 1e-4
 npts = int(1e7)
 
@@ -459,7 +470,7 @@ def make_msd():
 
 def plot_msd():
     J = LangevinSimulator(dt=dt, torque = 0)
-    t0,msd0 = np.load('ampl_range(0,1,3,5),10000000npts_msd_torque_0kT_dt=0.0001,bead.npy')
+    t0,msd0 = np.load(f'ampl_range({ampl_range[0]},{ampl_range[1]},{ampl_range[2]},{ampl_range[3]}),10000000npts_msd_torque_0kT_dt=0.0001,bead.npy')
     t_boxbox = [t0]
     msd_boxbox = [msd0]
     torque_range=[0]
