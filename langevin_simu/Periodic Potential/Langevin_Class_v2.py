@@ -354,7 +354,7 @@ class LangevinSimulator:
                 return (np.unwrap(x_wrap)[-1] - np.unwrap(x_wrap)[0]) / t[-1]
             
             if plot == True:
-                ampl_array = np.logspace(0, np.log10(50),nbv)
+                ampl_array = np.logspace(np.log10(50), np.log10(200),nbv)
                 v_mean = []
                 v_theo_array = []
                 
