@@ -9,7 +9,13 @@ from scipy.optimize import curve_fit
 
 
 traj_matrix = []
-
+def generate_mean_traj(N,L,A,torque):
+    part = DiffusionSimulation(dt = 1e-5,torque = 100)
+    for i in range(N):
+        traj = part.proceed_traj1(L ,A)
+        traj_matrix.append(traj)
+    mean_traj = np.mean(traj_matrix,axis=0)
+    return mean_traj
 
 #mean_traj = generate_mean_traj(1,1000000,3,100)
 
@@ -55,12 +61,12 @@ def total_hist(amplitude,dt):
     plt.show()
     
 def hist_at_t(t):
-    trajs = np.load('trajectories_1000000,nb_traj_50points_amplitude_1kT,frequency_10_dt_0.001_torque_0kT.npy')
-    matrix_t = [np.mod(trajs[i][t],2*np.pi)  for i in range(len(trajs))]
+    trajs = np.load('trajectories_1000000,nb_traj_1000points_amplitude_6kT,frequency_10_dt_0.001_torque_0kT.npy')
+    matrix_t = [trajs[i][t]  for i in range(len(trajs))]
     return matrix_t
 
 def plot_hist(t):
-    plt.hist(hist_at_t(t),bins = 80,density=True)
+    plt.hist(hist_at_t(t),bins = 200,density=True)
     plt.title(f'Histogram of positions at t={t}ms over 1000 realisations')
     plt.xlabel('angle [rad]')
     plt.ylabel('density')
@@ -68,4 +74,3 @@ def plot_hist(t):
     
 # A faire: 10000 realisations à 2kT, trouver comment fixer la densité à 1
     
-plot_hist(99999)

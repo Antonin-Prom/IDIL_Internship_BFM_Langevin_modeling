@@ -24,6 +24,14 @@ def generate_theory_msd(absciss,D_fit):
         theoretical_msd.append(msd_theo)
     return theoretical_msd
 
+def generate_trajs_and_msd():
+    A_list = [0,1,2,3,4,5]
+    analy = DiffusionSimulation2(dt=1e-4,x0 = 0)
+    for A in A_list :
+        trajs = analy.run_parallel(n_jobs=-1, repetitions = 30, npts = int(1e8), Amplitude = A, torque = 0) 
+        time_axis,mean_msd = analy.mean_msd_and_time_axis(trajs, n_jobs=-1, time_end=1/4, msd_nbpt = 2000, nb_traj = 30)
+        np.save(f't,msd,dt={analy.dt_s},{A}kT',[time_axis*analy.dt_s,mean_msd])
+    
 def asdefaveri_msd(A,dt):
     p = DiffusionSimulation2(dt=dt)
     a = 2*np.pi/p.frequency
@@ -73,10 +81,11 @@ def plot_msd_asdefvari(A,dt):
     #plt.loglog(absciss[int(len(absciss)/frac):],generate_theory_msd(absciss,D_eff)[int(len(absciss)/frac):],color='red')
     #D_eff/(2*0.1648)
     plt.loglog(absciss[int(len(absciss)/frac):],linear_D(absciss,D_fit,shift)[int(len(absciss)/frac):],linestyle ='--',color='black') #[int(len(absciss)/4):]
-
+"""
 for A in range(0,7,2):
     plot_msd_asdefvari(A,0.001)
 plt.xlabel('Dt/L²')
 plt.ylabel(r'$\theta$/L²')
 plt.legend()
 plt.show()
+"""
