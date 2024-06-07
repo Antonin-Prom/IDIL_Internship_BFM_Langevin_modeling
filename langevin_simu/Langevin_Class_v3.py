@@ -204,7 +204,7 @@ class LangevinSimulator:
         
         return msd_results 
         
-    def mean_msd_and_time(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 500, nb_traj = None,t = int(1e6)):
+    def mean_msd_and_time(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 500, nb_traj = None):
         """
         Compute the msd for a set of trajectories, than mean the msds.
 
@@ -257,7 +257,7 @@ class LangevinSimulator:
             fig.tight_layout()
             print(f'make_trace(): plots done in {time.time() - t0} s.')
             """
-        return time_axis,mean_msd
+        return time_axis,mean_msd,msd_matrix
     
     def full_auto_trajs_mean_msd(self,ampl_range = np.arange(8),nb_traj = 30, npts = int(1e7),msd_nbpt=1000, load = False, trajs_name = None ):
         """
