@@ -7,6 +7,7 @@ free_diff = LangevinSimulator(dt=1e-4, torque = 0, x0 = 0,analytical = False)
 free_diff.configure_plots()
 label_fontsize = 18
 legend_fontsize=14
+viridis = plt.cm.viridis
 
 def Free_diffusion():
 
@@ -62,7 +63,7 @@ def plot_different_std():
     std3 = np.std(trajs3, axis=0) 
     t = np.arange(len(trajs3[0]))*1e-3
     
-    viridis = plt.cm.viridis
+    
     colors = viridis(np.linspace(0, 1, 3))   
     plt.figure()    
     plt.plot(t,std5[::100],color=colors[0],label= r'dt = 10 $\mu$s')
@@ -85,42 +86,34 @@ def plot_different_std():
 Plot 3: Free Diffusion mean square displacement
 """        
     
-def linear_diff():
+def linear_diff(t,D):
     return 2*D*t
 
-trajs = np.load('free_trajs,dt=0.0001,rep = 10000.npy')[100]
-time_axis,mean_msd,matrix = free_diff.mean_msd_and_time(trajs, n_jobs=5, time_end=1/4, msd_nbpt = 500, nb_traj = None)
-t = time_axis * free_diff.dt
-popt, pcov = scipy.optimize.curve_fit(linear_diff, time_d, mean_msd_d)
-residuals = mean_msd_d - linear_diff(time_d, *popt)
-SS_res = np.sum(residuals**2)
-SS_tot = np.sum((mean_msd_d - np.mean(mean_msd_d))**2)
-R_squared = 1 - (SS_res / SS_tot)
-print(R_squared)
-plt.plot(time_d,mean_msd_d, label = 'Numerical MSD, torque = 20kT')
-plt.plot(time_d, linear_diff(time_d, *popt), linestyle = '--',color = 'black', label=f'Fitted Curve,v_fit = {popt[0]:.3f}')
-plt.plot(time_d, linear_diff(time_d, v_eff), linestyle = '--',color = 'red', label=f'Theoretical MSD: v_eff = {v_eff:.3f}')
+def free_MSD():
+    colors = viridis(np.linspace(0, 1, 10)) 
+    trajs = np.load('free_trajs,dt=0.0001,rep = 10000.npy')[:200]
+    time_axis,mean_msd_d,matrix = free_diff.mean_msd_and_time(trajs, n_jobs=5, time_end=1/4, msd_nbpt = 500, nb_traj = None)
+    t = time_axis * free_diff.dt
+    std = np.std(matrix,axis=0)
+    
+    popt, pcov = scipy.optimize.curve_fit(linear_diff, t[:-1], mean_msd_d[:-1],sigma=std, absolute_sigma=True)
+    residuals = (mean_msd_d - linear_diff(t, *popt))
+    SS_res = np.sum(residuals**2)
+    SS_tot = np.sum((mean_msd_d - np.mean(mean_msd_d))**2)
+    R_squared = 1 - (SS_res / SS_tot)
+    print(R_squared)
+    
+    # Plotting the results
+    plt.figure()
+    plt.plot(t, mean_msd_d, label='Numerical MSD', color=colors[0],linewidth=4)
+    plt.plot(t, linear_diff(t, *popt), linestyle='--', color='r', label=f'Fitted Curve')
+    plt.fill_between(t[:-1], mean_msd_d[:-1] - std, mean_msd_d[:-1] + std, color=colors[2], alpha=0.4)
+    plt.xlabel('Lag time (s)',fontsize=label_fontsize)
+    plt.ylabel('MSD (rad²)',fontsize=label_fontsize)
+    plt.show()
 
-plt.fill_between(time_d, mean_msd_d -std, mean_msd_d + std, color='gray', alpha=0.6)
-plt.xlabel('Lag time (s)')
-plt.ylabel('MSD (rad²)')
-plt.legend()
-plt.show()
-viridis = plt.cm.viridis
-colors = viridis(np.linspace(0, 1, 3))   
-plt.figure()    
-plt.plot(t,mean_msd,color=colors[0],label= )
+free_MSD()
 
-plt.plot(t,np.sqrt(2*free_diff.D*t),color='r',linestyle='--',linewidth=3,label=r'$\sqrt{2Dt}$')
-plt.legend(fontsize = legend_fontsize)
-plt.grid(True)
-plt.xlabel('Time [s]',fontsize = label_fontsize)
-plt.ylabel('Standard deviation [rad]',fontsize = label_fontsize)
-plt.xlim(0,1)
-  
-plt.tight_layout()
-plt.savefig('free_std_plot1.png', dpi=300)
-plt.show()
 
 
 
