@@ -8,7 +8,6 @@ from joblib import Parallel, delayed
 import time
 from scipy.interpolate import interp1d
 import scipy
-from numdifftools import Derivative
 from numba import njit
 from matplotlib.lines import Line2D
 from tqdm import tqdm
@@ -332,61 +331,73 @@ class LangevinSimulator:
         time_box,mean_msd_box,trajectories_box = self.full_auto_trajs_mean_msd(ampl_range = ampl_range,nb_traj = 20, npts = npts,msd_nbpt=msd_nbpt )
         time_box,mean_msd_box = np.asarray(time_box, dtype=np.float32),np.asarray(mean_msd_box, dtype=np.float32)
         np.save(f'ampl_range({ampl_range[0]},{ampl_range[1]},{ampl_range[2]},{ampl_range[3]}),{npts}npts_msd_torque_{self.torque}kT_dt={self.dt},cylindric',[time_box,mean_msd_box])
+   
+    def v_theory_reimann(self, A):
+        a = 2 * np.pi / self.frequency
     
-    def drift_velocity(self,A=None,simu=True,plot=True,nbv=15):
-        def v_theory(A=A):
-            a = 2 * np.pi / self.frequency
-            Bp = self.full_factor(A)
-            Bm = self.full_factor(-A)
-            if self.torque >= 10:
-                C = 0
-            else:
-                C = np.exp(-self.torque)
-            
-            def inner_integrand(x_prime):
-                return self.full_integrand(x_prime,A)
+        def I_plus(x):
+            result, _ = quad(self.full_integrand, x - a, x, args=(A))
+            return (1 / self.D) * self.full_integrand(x, -A) * result
     
-            def outer_integrand(x):
-                inner_integral, _ = quad(lambda x_prime: inner_integrand(x_prime),0,x)
-                return self.full_integrand(x,A)*inner_integral     
-            D,_ = quad(outer_integrand, -a/2, a/2)        
-            
-            
-            v_theo = (1/self.gamma)*(2*np.pi*self.KT*(1-C))/(Bp*Bm - (1-C)*D)
-            return v_theo
-                
-        if simu == True:
-        
-            def v_simu(A):
-                npts = int(1e7)
-                x_wrap = self.main_traj_(N=npts, A=A, U=self.make_potential_sin(ampl=A), x0=[0], ide=0)
-                idxs = np.linspace(0, npts, 5000, endpoint=False, dtype=int)
-                t = np.linspace(0, npts * self.dt, len(idxs), endpoint=False)
-                return (np.unwrap(x_wrap)[-1] - np.unwrap(x_wrap)[0]) / t[-1]
-            
-            if plot == True:
-                ampl_array = np.logspace(np.log10(50), np.log10(200),nbv)
-                v_mean = []
-                v_theo_array = []
-                
-                for A in tqdm(ampl_array, desc="Amplitude Progress"):
-                    v_simu_array = Parallel(n_jobs=-1)(delayed(v_simu)(A) for _ in tqdm(range(10), desc=f"Simulations for A={A}", leave=False))
-                    v_simu_mean = np.mean(v_simu_array, axis=0)
-                    v_mean.append(v_simu_mean)
-                    v_theo = v_theory(A=A)
-                    v_theo_array.append(v_theo)
-                
-                np.save(f'v_theo,v_simu,torque={self.torque}', [v_theo_array, v_mean])
-                plt.scatter(ampl_array, v_mean, color='salmon', label='simulation mean velocity')
-                plt.plot(ampl_array, v_theo_array, color='lightblue', label='theoretical mean velocity')
-                plt.xscale('log')
-                plt.yscale('log')
-                plt.xlabel('Amplitude [kT]')
-                plt.ylabel('<v>')
-                plt.title(f' Torque = {self.torque}kT, dt = {self.dt}')
-                plt.savefig(f'mean_velocity_theo_simu_torque={self.torque}kT_Ampl_50pt.png', dpi=300)
-                plt.legend()
-                plt.show()
+        denominator, _ = quad(lambda x: I_plus(x) / a, 0, a)
+        v_theo = (1 - np.exp(a * self.torque)) / denominator
+        return v_theo
+    
+    def v_theory_risken(self, A):
+        a = 2 * np.pi / self.frequency
+        Bp = self.full_factor(A)
+        Bm = self.full_factor(-A)
+        C = 0 if self.torque >= 10 else np.exp(-self.torque)
+
+        def inner_integrand(x_prime):
+            return self.full_integrand(x_prime, A)
+
+        def outer_integrand(x):
+            inner_integral, _ = quad(inner_integrand, 0, x)
+            return self.full_integrand(x, A) * inner_integral
+
+        D, _ = quad(outer_integrand, -a / 2, a / 2)
+        v_theo = (1 / self.gamma) * (2 * np.pi * self.KT * (1 - C)) / (Bp * Bm - (1 - C) * D)
+        return v_theo
+
+    def v_simu(self, A):
+        npts = int(1e7)
+        x_wrap = self.main_traj_(N=npts, A=A, U=self.make_potential_sin(ampl=A), x0=[0], ide=0)
+        idxs = np.linspace(0, npts, 5000, endpoint=False, dtype=int)
+        t = np.linspace(0, npts * self.dt, len(idxs), endpoint=False)
+        return np.abs((np.unwrap(x_wrap)[-1] - np.unwrap(x_wrap)[0]) / t[-1])
+
+    def drift_velocity(self, A=None, simu=True, plot=True, nbv=15):
+        if simu:
+            ampl_array = np.logspace(np.log10(50), np.log10(200), nbv)
+            v_mean = []
+            v_theo_array = []
+
+            for A in tqdm(ampl_array, desc="Amplitude Progress"):
+                try:
+                    v_simu_array = Parallel(n_jobs=-1)(
+                        delayed(self.v_simu)(A) for _ in tqdm(range(10), desc=f"Simulations for A={A}", leave=False)
+                    )
+                except Exception as e:
+                    print(f"Error during parallel execution: {e}")
+                    continue
+
+                v_simu_mean = np.mean(v_simu_array, axis=0)
+                v_mean.append(v_simu_mean)
+                v_theo = self.v_theory_reimann(A=A)
+                v_theo_array.append(v_theo)
+
+            np.save(f'v_theo,v_simu,torque={self.torque}', [v_theo_array, v_mean])
+            plt.scatter(ampl_array, v_mean, color='salmon', label='simulation mean velocity')
+            plt.plot(ampl_array, v_theo_array, color='lightblue', label='theoretical mean velocity')
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.xlabel('Amplitude [kT]')
+            plt.ylabel('<v>')
+            plt.title(f' Torque = {self.torque}kT, dt = {self.dt}')
+            plt.savefig(f'mean_velocity_theo_simu_torque={self.torque}kT_Ampl_50pt.png', dpi=300)
+            plt.legend()
+            plt.show()
 
             
             
