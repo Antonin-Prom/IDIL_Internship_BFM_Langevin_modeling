@@ -42,16 +42,16 @@ class LangevinSimulator:
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
-        #self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.L = 100e-9   #cylinder_length
-        self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
+        #self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
         self.tau = self.moment_inertia / self.gamma
         self.D = self.KT / self.gamma
         self.dt = dt # tau
         self.frequency = frequency
         self.space_step = 1e-8
-        self.torque = torque
+        self.torque = torque/(2*np.pi)
         self.x0 = x0
         self.analytical = analytical
         self.x_pot = np.linspace(0, 2*np.pi, 50000)
@@ -72,7 +72,7 @@ class LangevinSimulator:
         periodic sinusoidal potential, ampl and tilt in KT units
         return array
         '''
-        U = ampl*self.KT*np.cos(self.x_pot*self.frequency) - self.torque*self.x_pot/(2*np.pi)*self.KT
+        U = ampl/2*self.KT*np.sin(self.x_pot*self.frequency) - self.torque*self.x_pot*self.KT
         if plots:
             plt.figure('make_potential_sin', clear=True)
             plt.plot(self.x_pot, U/self.KT, ',')
@@ -80,7 +80,7 @@ class LangevinSimulator:
         return U
     
     def analytical_potential(self,x,A):
-        U = A*np.cos(x*self.frequency) - self.torque*x/(2*np.pi)
+        U = A/2*np.sin(x*self.frequency) - self.torque*x/(2*np.pi)
         return U
     
     def main_traj_(self, N, A, U, x0, ide ):
@@ -108,7 +108,7 @@ class LangevinSimulator:
         mean_msd = np.concatenate(([0],np.mean(msd_box, axis=0)))
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         if save == True:
-            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},cylindric',[time_axis,mean_msd])
+            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead',[time_axis,mean_msd])
         return time_axis,mean_msd
     
     def brutal_msd_amplitude_range(self,ampl_range=[0,5,10,20],repetition=None,N=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
@@ -302,7 +302,7 @@ class LangevinSimulator:
     """
 
     def integrand1(self, x, amplitude):
-        return np.exp(amplitude*np.cos(x*self.frequency))
+        return np.exp(amplitude*np.sin(x*self.frequency))
     
     def full_integrand(self,x,amplitude):
         return np.exp(-self.analytical_potential(x, amplitude))
@@ -312,7 +312,8 @@ class LangevinSimulator:
         return result
     
     def full_factor(self,amplitude):
-        result, _ = quad(self.full_integrand, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
+        a = 2 * np.pi / self.frequency
+        result, _ = quad(self.full_integrand, -0, a, args=(amplitude))
         return result    
     
     def lifson_jackson(self, amplitude): #Meet einstein coeff at 0 barrier
@@ -338,16 +339,20 @@ class LangevinSimulator:
         def I_plus(x):
             result, _ = quad(self.full_integrand, x - a, x, args=(A))
             return (1 / self.D) * self.full_integrand(x, -A) * result
-    
-        denominator, _ = quad(lambda x: I_plus(x) / a, 0, a)
+        
+        def I_minus(x):
+            result, _ = quad(self.full_integrand, x , x + a, args=(-A))
+            return (1 / self.D) * self.full_integrand(x, A) * result
+        
+        denominator, _ = quad(lambda x: I_minus(x) / a, 0, a)
         v_theo = (1 - np.exp(a * self.torque)) / denominator
-        return v_theo
+        return np.abs(v_theo)
     
     def v_theory_risken(self, A):
         a = 2 * np.pi / self.frequency
         Bp = self.full_factor(A)
         Bm = self.full_factor(-A)
-        C = 0 if self.torque >= 10 else np.exp(-self.torque)
+        C = np.exp(-self.torque*a)
 
         def inner_integrand(x_prime):
             return self.full_integrand(x_prime, A)
@@ -357,19 +362,18 @@ class LangevinSimulator:
             return self.full_integrand(x, A) * inner_integral
 
         D, _ = quad(outer_integrand, -a / 2, a / 2)
-        v_theo = (1 / self.gamma) * (2 * np.pi * self.KT * (1 - C)) / (Bp * Bm - (1 - C) * D)
+        v_theo = (1 / self.gamma) * (a * self.KT * (1 - C)) / (Bp * Bm - (1 - C) * D)
         return v_theo
 
     def v_simu(self, A):
         npts = int(1e7)
-        x_wrap = self.main_traj_(N=npts, A=A, U=self.make_potential_sin(ampl=A), x0=[0], ide=0)
-        idxs = np.linspace(0, npts, 5000, endpoint=False, dtype=int)
-        t = np.linspace(0, npts * self.dt, len(idxs), endpoint=False)
-        return np.abs((np.unwrap(x_wrap)[-1] - np.unwrap(x_wrap)[0]) / t[-1])
+        x = np.unwrap(self.main_traj_(N=npts, A=A, U=self.make_potential_sin(ampl=A), x0=[0], ide=0))
+        
+        return np.abs((x[-1] - x[0]) / (npts*self.dt))
 
-    def drift_velocity(self, A=None, simu=True, plot=True, nbv=15):
+    def drift_velocity(self, simu=True, plot=True, nbv=8,risken=True):
         if simu:
-            ampl_array = np.logspace(np.log10(50), np.log10(200), nbv)
+            ampl_array = np.logspace(-0.5,1.2, nbv)
             v_mean = []
             v_theo_array = []
 
@@ -382,19 +386,24 @@ class LangevinSimulator:
                     print(f"Error during parallel execution: {e}")
                     continue
 
-                v_simu_mean = np.mean(v_simu_array, axis=0)
+                v_simu_mean = np.mean(v_simu_array)
                 v_mean.append(v_simu_mean)
-                v_theo = self.v_theory_reimann(A=A)
+                if risken == True:
+                    v_theo = self.v_theory_risken(A=A)
+                else:
+                    v_theo = self.v_theory_reimann(A=A)
                 v_theo_array.append(v_theo)
 
             np.save(f'v_theo,v_simu,torque={self.torque}', [v_theo_array, v_mean])
             plt.scatter(ampl_array, v_mean, color='salmon', label='simulation mean velocity')
             plt.plot(ampl_array, v_theo_array, color='lightblue', label='theoretical mean velocity')
+            plt.ylim(1e-9,10000)
             plt.xscale('log')
             plt.yscale('log')
             plt.xlabel('Amplitude [kT]')
             plt.ylabel('<v>')
             plt.title(f' Torque = {self.torque}kT, dt = {self.dt}')
+            plt.tight_layout()
             plt.savefig(f'mean_velocity_theo_simu_torque={self.torque}kT_Ampl_50pt.png', dpi=300)
             plt.legend()
             plt.show()
@@ -454,9 +463,9 @@ class LangevinSimulator:
             mean_msd_box = mean_msd_boxbox[j]
             self.torque = torque_range[j]
             F = self.KT*self.torque/(2*np.pi)
-            v_eff = F/self.gamma
-            print('JJJJJJJ,V_eff',j,v_eff)
+             
             for i, A in enumerate(ampl_range):
+                v_eff = self.v_theory_risken(A)
                 U = self.make_potential_sin(A)
                 absciss = time_axis_box[i] * self.D / (a * a)
                 norm_msd = mean_msd_box[i]/ (a * a)
@@ -511,9 +520,13 @@ class LangevinSimulator:
  
 
 
+d = LangevinSimulator(dt=1e-4,torque=10)
+time_axis,mean_msd = np.load('t,msd_10000000npts_10rep_torque_1.5915494309189535kT_dt=0.0001,bead.npy')
+a = 2*np.pi/d.frequency
+def parabolic_msd(t,D,v_eff):
+    return (2 * D * t) + (v_eff**2)*t**2 
 
-
-
-
-
-
+plt.loglog(time_axis*d.D / (a * a),mean_msd/(a)**2)
+v_eff = d.v_theory_risken(5)
+print(v_eff)
+plt.loglog(time_axis*d.D / (a * a),parabolic_msd(time_axis,d.D,v_eff)/(a)**2,color='r',linestyle='--')
