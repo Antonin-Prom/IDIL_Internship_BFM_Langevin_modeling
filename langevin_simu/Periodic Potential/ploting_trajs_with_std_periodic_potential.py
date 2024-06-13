@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+"""b
 Plots the traj with variance
 """
 

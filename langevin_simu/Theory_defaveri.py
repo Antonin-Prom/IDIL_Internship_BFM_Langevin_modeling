@@ -67,20 +67,20 @@ def integrant_term(y,t,A):
     return y*y*np.exp(-part.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_LJ))/np.sqrt(4*np.pi*part.rotational_einstein_diff)
 
 
-def theory_curve_oscillatory(time,A):
+def theory_curve_oscillatory(time,A,freq):
     part = DiffusionSimulation()
     D_LJ = part.lifson_jackson_noforce(A)
     msd = []
     for t in time :
         def integrand_msd(y):
-             return y*y*np.exp(-part.tilted_periodic_potential(A, y*np.sqrt(t)))*np.exp(-y*y/(4*D_LJ))/np.sqrt(4*np.pi*part.rotational_einstein_diff) 
-        lower_limit = -2
-        upper_limit = 2
+             return y*y*np.exp(-A*np.cos(y*np.sqrt(t)*freq))*np.exp(-y*y/(4*D_LJ))/np.sqrt(4*np.pi*part.rotational_einstein_diff) 
+        lower_limit = -3
+        upper_limit = 3
         result, error = quad(integrand_msd, lower_limit, upper_limit,epsabs=1e-8, epsrel=1e-6)
         msd.append(t*result)
     return np.array(msd)
 
-def theory_curve_oscillatory_single(t,A):
+def theory_curve_oscillatory_unit(t,A):
     part = DiffusionSimulation()
     D_LJ = part.lifson_jackson_noforce(A)
     msd = []
@@ -161,7 +161,12 @@ def plot_integrand_torque(t,A,torque):
     plt.xlabel('y')
     plt.ylabel('u.a')
     plt.title(f'Integrand at time {t:}s, amplitude = {A}kT,torque = {torque}kT')
-plot_integrand_torque(10,1,1)
+
+freq = 10
+tim = np.logspace(-3,4,200)
+defav5kt = theory_curve_oscillatory(tim,5,freq)
+plt.loglog(tim,defav5kt,label = 'Defaveri V_0/kT = 5')
 plt.legend()
+plt.ylim(0.001,50)
 print(msd)
 plt.show()
