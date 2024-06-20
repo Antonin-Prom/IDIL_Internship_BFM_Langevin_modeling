@@ -42,9 +42,9 @@ class LangevinSimulator:
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
-        #self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.L = 100e-9   #cylinder_length
-        self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
+        #self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
         self.tau = self.moment_inertia / self.gamma
         self.D = self.KT / self.gamma

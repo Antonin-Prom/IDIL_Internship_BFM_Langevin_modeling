@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+Created on Fri Jun 14 14:26:27 2024
+
+@author: CBS
+"""
+# -*- coding: utf-8 -*-
 
 import numpy as np
 from scipy.integrate import quad
@@ -42,9 +48,9 @@ class LangevinSimulator:
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
-        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        #self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.L = 100e-9   #cylinder_length
-        #self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
+        self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
         self.tau = self.moment_inertia / self.gamma
         self.D = self.KT / self.gamma
@@ -108,7 +114,7 @@ class LangevinSimulator:
         mean_msd = np.concatenate(([0],np.mean(msd_box, axis=0)))
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         if save == True:
-            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead',[time_axis,mean_msd])
+            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},cylinder',[time_axis,mean_msd])
         return time_axis,mean_msd
     
     def brutal_msd_amplitude_range(self,ampl_range=[0,5,10,20],repetition=None,N=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
@@ -519,40 +525,87 @@ class LangevinSimulator:
         plt.show()
  
 
-"""
-d = LangevinSimulator(dt=1e-4,torque=10)
-A = 10
-time_axis,mean_msd = np.load('t,msd_100000000npts_10rep_torque_1.5915494309189535kT_dt=0.0001,bead.npy')
-time_axis *= d.dt
-a = 2*np.pi/d.frequency
-D_eff = d.lifson_jackson(A/2)
 
-absciss = time_axis* d.D / (a * a)
-norm_msd = mean_msd/ (a * a)
-min_absciss_value = 10
-window_indices = np.where(absciss > min_absciss_value)[0]
-                
-def parabolic_msd(t,D,v_eff):
-    return (2 * D * t) + (v_eff)*t**2 
-                
-popt, _ = scipy.optimize.curve_fit(parabolic_msd, time_axis[window_indices], mean_msd[window_indices])
+d = LangevinSimulator(dt=1e-5,torque=0,frequency=26)
+time_axis,mean_msd = np.load('t,msd_100000000npts_10rep_torque_0kT_dt=1e-05,cylinder.npy')
+
+
+A = 10 / 2
+time_axis *= d.dt
+a = 2 * np.pi / d.frequency
+D_eff = d.lifson_jackson(A)
+
+# Viridis colors
+viridis = plt.cm.viridis
+colors = viridis(np.linspace(0, 1, 100))
+
+# Functions
+def linear_msd(t, D):
+    return 2 * D * t
+
+def boltz_exp(A, x):
+    return np.exp(-d.analytical_potential(x, A))
+
+def defaveri_stationary(A):
+    X = np.linspace(-a / 6, a / 6, 1000)
+    Y = boltz_exp(A, X)
+    Z = np.mean(Y)
+    return np.mean((X ** 2) * Y) / Z
+
+# Calculation
+min_absciss_value = 1
+window_indices = np.where(time_axis > min_absciss_value)[0]
+qstat = defaveri_stationary(A)
+equi = np.ones(len(time_axis)) * qstat
+
+# Fit
+popt, _ = scipy.optimize.curve_fit(linear_msd, time_axis[window_indices], mean_msd[window_indices])
 D_fit = popt[0]
-v_fit = popt[1]
-print('D_fit, v_fit = ', [D_fit,v_fit])
-plt.plot(time_axis,mean_msd)
-v_eff = d.v_theory_risken(5)#*d.torque*a/d.gamma
-print('D_eff,v_eff = ',[D_eff,v_eff])
-#plt.plot(time_axis,parabolic_msd(time_axis,D_eff,v_eff),color='r',linestyle='--')
-plt.plot(time_axis,parabolic_msd(time_axis,D_fit,v_fit),color='black',linestyle='--')
+
+# Plotting
+plt.plot(time_axis, mean_msd, color=colors[0], label='Mean MSD')
+plt.plot(time_axis, equi, color=colors[30], linestyle='--', label=f'MSD_quasi-stationary = {qstat:.4f}rad²')
+plt.plot(time_axis[:int(window_indices[0] / 2)], linear_msd(time_axis, d.D)[:int(window_indices[0] / 2)], color=colors[70], linestyle='--', label=rf'$D_0$ = {d.D:.2f} rad²/s')
+plt.plot(time_axis[window_indices], linear_msd(time_axis, D_eff)[window_indices], color=colors[99], linestyle='--', label=rf'D_eff/D_fit = {D_eff / D_fit:.2f}')
+
+# Labels and Legend
+label_fontsize = 14
+legend_fontsize = 10
+plt.xlabel('t (s)', fontsize=label_fontsize)
+plt.ylabel(r'${\langle \theta^2 \rangle}$', fontsize=label_fontsize)
+plt.legend(fontsize=legend_fontsize)
+
+# Other plot settings
+plt.grid(True)
+plt.title(r'MSD A=10kT freq=26 gamma=1.56e-21 N m s /rad dt=10$\mu$s',fontsize=12)
+plt.tight_layout()
+plt.savefig('MSD_A=10kT_freq=26_gamma=1.56e-21.png', dpi=300)
 plt.xscale('log')
 plt.yscale('log')
+
+# Show plot
+plt.show()
+
+
+"""
+Histogramm part
 """
 
+def matrix_at_t(trajs,t):
+    m = []
+    for traj in trajs:
+        traj=np.unwrap(traj)
+        m.append(traj[t])
+    return m
 
 
-
-
-
+def plot_histogram(load = False, repetitions = 15, t_final = 10, file_name = 'file_name'):
+    npts = int(t_final/(d.dt))
+    if load == False:
+        trajs = d.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = npts, x0 = np.zeros(repetitions), Amplitude = 1, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
+    else:
+        trajs = np.load(f'{file_name}')
+    m = matrix_at_t(trajs,t_final)
 
 
 

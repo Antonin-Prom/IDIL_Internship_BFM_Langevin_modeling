@@ -18,6 +18,11 @@ from numdifftools import Derivative
 from numba import njit
 from matplotlib.lines import Line2D
 from scipy.stats import norm
+from matplotlib.cm import viridis
+label_fontsize = 18
+legend_fontsize=14
+viridis = plt.cm.viridis
+
 
 @njit
 def _make_trace(x, npts, dUdx, dt, gamma, thermnoise):
@@ -48,9 +53,9 @@ class LangevinSimulator:
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
-        #self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.L = 100e-9   #cylinder_length
-        self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
+        #self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
         self.tau = self.moment_inertia / self.gamma
         self.D = self.KT / self.gamma
@@ -162,105 +167,88 @@ class LangevinSimulator:
         if save == True:
             np.save(f'final_trajectories_{total_len:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',old_trajs)
         return old_trajs            
-    
 
-
-def matrix_at_t(trajs,t):
+@njit
+def matrix_at_t(trajs, t):
     m = []
     for traj in trajs:
-        traj=np.unwrap(traj)
         m.append(traj[t])
-    return m
-    
-def plot_histograms(npts=1e6,repetitions=1000,free=False,drift=False,periodic=False,tilted_periodic=False,load=False,file_name=None):
-    x0 = np.ones(repetitions)*np.pi
-    time_select = [1*int(npts/10),4*int(npts/10),7*int(npts/10),int(npts -1)]
+    return np.array(m)
+
+def plot_histograms(npts=1e6, repetitions=1000, free=False, drift=False, periodic=False, tilted_periodic=False, load=False, file_name=None):
+    x0 = np.zeros(repetitions) 
+    time_select = [1 * int(npts/10), 4 * int(npts/10), 7 * int(npts/10), int(npts - 1)]
               
-    if free == True:
-        free = LangevinSimulator(dt=1e-4)
-        if load == False:
+    if free:
+        free_sim = LangevinSimulator(dt=1e-4)
+        if not load:
             t0 = time.time()
-            trajs = free.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 0, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
-            print(f'Generate done in {time.time() - t0:.1f} s ')
+            trajs = free_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=0, torque=0, iteration=0, save=True, print_time=False, plots=False)
+            print(f'Generate done in {time.time() - t0:.1f} s')
         else:
             t1 = time.time()
-            trajs = np.load(f'{file_name}')
+            trajs = np.load(file_name)
+            print(f'Load done in {time.time() - t1:.1f} s')
             
-        #trajs = np.unwrap(trajs)
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)
-        print(f'Load done in {time.time() - t1:.1f} s ')
-            
-    if drift == True:
-        drift = LangevinSimulator(dt=1e-4,torque=10)
-        if load == False:
+    elif drift:
+        drift_sim = LangevinSimulator(dt=1e-4, torque=10)
+        if not load:
             t0 = time.time()
-            trajs = drift.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 0, torque = 0,iteration = 0, save = False, print_time = False, plots = False)        
-            print(f'Generate done in {time.time() - t0:.1f} s ')
+            trajs = drift_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=0, torque=0, iteration=0, save=False, print_time=False, plots=False)        
+            print(f'Generate done in {time.time() - t0:.1f} s')
         else:
             t1 = time.time()
-            trajs = np.load(f'{file_name}')
+            trajs = np.load(file_name)
+            print(f'Load done in {time.time() - t1:.1f} s')
             
-        trajs = np.unwrap(trajs)    
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)    
-        print(f'Load done in {time.time() - t1:.1f} s ')
-            
-    if periodic == True:
-        periodic = LangevinSimulator(dt=1e-4,torque=0)
-        if load == False:
-            trajs = periodic.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 1, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
+    elif periodic:
+        periodic_sim = LangevinSimulator(dt=1e-4, torque=0)
+        if not load:
+            trajs = periodic_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=1, torque=0, iteration=0, save=False, print_time=False, plots=False)
         else:
-            trajs = np.load(f'{file_name}')
-        trajs = np.unwrap(trajs)
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)
+            trajs = np.load(file_name)
             
-    if tilted_periodic == True:
-        tilted_periodic = LangevinSimulator(dt=1e-4,torque=10)
-        if load == False:
-            trajs = tilted_periodic.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 4, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
+    elif tilted_periodic:
+        tilted_periodic_sim = LangevinSimulator(dt=1e-4, torque=10)
+        if not load:
+            trajs = tilted_periodic_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=4, torque=0, iteration=0, save=False, print_time=False, plots=False)
         else:
-            trajs = np.load(f'{file_name}')  
-        trajs = np.unwrap(trajs)
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)
-            
+            trajs = np.load(file_name)
+    
+    # Ensure trajectories are unwrapped only once
+    trajs = np.unwrap(trajs)
+    
+    # Collect matrices at selected times
+    matrixes = [matrix_at_t(trajs, t) for t in time_select]
+    
+    # Determine the histogram bounds
     all_data = np.concatenate(matrixes)
     x_min, x_max = np.min(all_data), np.max(all_data)
-    y_min, y_max = 0, max([np.histogram(m, bins=repetitions)[0].max() for m in matrixes])
+    y_min, y_max = 0, max([np.histogram(m, bins=100)[0].max() for m in matrixes])
 
     # Plotting histograms in quadrants
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    labels = [f't = {time_select[0] * 1e-4}s', f't = {time_select[1] * 1e-4}s', f't = {time_select[2] * 1e-4}s', f't = {time_select[3] * 1e-4}s']
-    axs = axs.flatten()
-
-    for idx, m in enumerate(matrixes):
-        axs[idx].hist(m, bins=int(repetitions), alpha=0.7,density=True)
-        (mu, sigma) = norm.fit(m)
-        xmin, xmax = axs[idx].get_xlim()
-        x = np.linspace(xmin, xmax, 100)
+    plt.figure(figsize=(10, 6))
+    colors = viridis(np.linspace(0, 1, len(time_select)))
+    labels = [f't = {t * 1e-4:.0f}s' for t in time_select]
+    
+    num_bins = 100
+    for idx, (m, color) in enumerate(zip(matrixes, colors)):
+        hist_data, bins = np.histogram(m, bins=num_bins, density=True)
+        bin_centers = (bins[:-1] + bins[1:]) / 2
+        plt.plot(bin_centers, hist_data, 'o', color=color, label=labels[idx])
+        
+        #(mu, sigma) = norm.fit(m)
+        #drift_sim.torque/drift_sim.gamma
+        (mu, sigma) = (0, np.sqrt(2*free_sim.D*time_select[idx]*free_sim.dt))
+        x = np.linspace(bins[0], bins[-1], 100)
         p = norm.pdf(x, mu, sigma)
-        axs[idx].plot(x, p, 'k', linewidth=2, label='Fitted Normal Distribution')
-        axs[idx].set_title(f'Time {labels[idx]}')
-        axs[idx].set_xlim(x_min, x_max)
-        axs[idx].set_ylim(y_min, y_max)
-        axs[idx].set_xlabel('Position')
-        axs[idx].set_ylabel('Frequency')
-        axs[idx].legend()
-
+        plt.plot(x, p, '-', color=color, linewidth=2)
+    
+    plt.xlabel('Position [rad]', fontsize=14)
+    plt.ylabel('Density', fontsize=14)
+    plt.legend(fontsize=12)
     plt.tight_layout()
+    plt.savefig('superimposed_histogram_free_diff.png', dpi=300)
     plt.show()
 
-plot_histograms(free=True, load=False, file_name='0ite_trajectories_1000000,nb_traj_1000points_amplitude_0kT,frequency_10_dt_0.0001_torque_0kT.npy')        
-
-
-
+#plot_histograms(free=True, load=True, file_name='0ite_trajectories_1000000,nb_traj_1000points_amplitude_0kT,frequency_10_dt_0.0001_torque_0kT.npy')

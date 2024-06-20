@@ -19,6 +19,10 @@ from numba import njit
 from matplotlib.lines import Line2D
 
 
+label_fontsize = 18
+legend_fontsize=14
+viridis = plt.cm.viridis
+
 @njit
 def _make_trace(x, npts, dUdx, dt, gamma, thermnoise):
     ''' langevin finite difference integrator, called by main_traj_ for numba acceleration '''
@@ -108,6 +112,7 @@ class LangevinSimulator:
         if save == True:
             np.save(f'{iteration}ite_trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',parallel_out)
         if plots:
+            color=viridis(0.6)
             U = sin_pot
             x_wrap = parallel_out[0]
             x_unwrap = np.unwrap(x_wrap)
@@ -121,18 +126,18 @@ class LangevinSimulator:
             ax2 = fig.add_subplot(222)
             ax3 = fig.add_subplot(223)
             ax4 = fig.add_subplot(224)
-            ax1.plot(np.linspace(0, 2*np.pi, len(U)), U/self.KT, ',')
+            ax1.plot(np.linspace(0, 2*np.pi, len(U)), U/self.KT, ',',color=color)
             ax1.set_ylabel('Potential [KT]')
             ax1.set_xlabel('angle (rad)')
             ax1.set_title(f'Ampl={Amplitude} KT(pkpk)    dt={self.dt:.1e} s    gamma={self.gamma:.1e} Nsm    D={self.D:.2f} m2/s    torque={self.torque} KT', fontsize=8)
-            ax2.plot(t, _x_wrap, ',')
+            ax2.plot(t, _x_wrap,',',color=color)
             ax2.set_ylabel('angle (rad)')
             ax2.set_xlabel('time (s)')
-            ax3.hist(_x_wrap, 200, orientation='vertical')
+            ax3.hist(_x_wrap, 200, orientation='vertical',color=color)
             ax3.set_xlabel('angle (rad)')
             ax3.set_ylabel('Occur.')
             ax3.set_xlim([0,2*np.pi])
-            ax4.plot(t, _x_unwrap/(2*np.pi), lw=1)
+            ax4.plot(t, _x_unwrap/(2*np.pi),color=color, lw=1)
             ax4.set_xlabel('time (s)')
             ax4.set_ylabel('angle (turns)')
             ax4.set_title(f'mean speed: {(np.unwrap(x_wrap)[-1] - np.unwrap(x_wrap)[0])/t[-1]:.3f} Hz', fontsize=8)
@@ -167,6 +172,7 @@ class LangevinSimulator:
 def plot_trajs(free=False,drift=False,periodic=False,tilted_periodic=False):
     x0 = np.zeros(50)
     
+    
     if free == True:
         free = LangevinSimulator(dt=1e-4)
         free.run_parallel_numba(repetitions=50, n_jobs=5, npts = int(1e7), x0 = x0, Amplitude = 0, torque = 0,iteration = 0, save = False, print_time = False, plots = True)
@@ -183,7 +189,14 @@ def plot_trajs(free=False,drift=False,periodic=False,tilted_periodic=False):
         tilted_periodic = LangevinSimulator(dt=1e-4,torque=10)
         tilted_periodic.run_parallel_numba(repetitions=50, n_jobs=5, npts = int(1e7), x0 = x0, Amplitude = 4, torque = 0,iteration = 0, save = False, print_time = False, plots = True)
 
-
+import seaborn as sns
+sns.set(style="whitegrid")
+plt.rcParams['figure.figsize'] = [8, 6]
+plt.rcParams['font.size'] = 12
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['grid.color'] = 'gray'
+plt.rcParams['grid.alpha'] = 0.5
 
 plot_trajs(tilted_periodic=True)
 

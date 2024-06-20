@@ -14,10 +14,15 @@ from joblib import Parallel, delayed
 import time
 from scipy.interpolate import interp1d
 import scipy
+from numdifftools import Derivative
 from numba import njit
 from matplotlib.lines import Line2D
 from scipy.stats import norm
-import math
+from matplotlib.cm import viridis
+label_fontsize = 18
+legend_fontsize=14
+viridis = plt.cm.viridis
+
 
 @njit
 def _make_trace(x, npts, dUdx, dt, gamma, thermnoise):
@@ -48,9 +53,9 @@ class LangevinSimulator:
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
-        #self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.L = 100e-9   #cylinder_length
-        self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
+        #self.gamma = 3.841*np.pi*self.viscosity_NS_m2*self.L*self.R_m**2*(1+0.3) # [Nsm] cylinder gamma_rot_parallel for diam=0.5*length
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
         self.tau = self.moment_inertia / self.gamma
         self.D = self.KT / self.gamma
@@ -162,187 +167,96 @@ class LangevinSimulator:
         if save == True:
             np.save(f'final_trajectories_{total_len:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',old_trajs)
         return old_trajs            
-    
-    def integrand1(self, x, amplitude):
-        return np.exp(-self.analytical_potential(x, amplitude))
-    
-    def factor1(self, amplitude):  
-        result, _ = quad(self.integrand1, -np.pi / self.frequency, np.pi / self.frequency, args=(amplitude))
-        return result
-    
-    def lifson_jackson_noforce(self, amplitude): #Meet einstein coeff at 0 barrier
-        lifson_jackson1 = self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
-        return lifson_jackson1     
-    
-    def lifson_jackson_force(self, amplitude, F):
-        lifson_jackson2 = (self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))) * ((np.sinh(F*(2*np.pi / self.frequency)/2))/(F*(2*np.pi / self.frequency)/2))**2
-        return lifson_jackson2
-    
 
-
-
-def matrix_at_t(trajs,t):
+@njit
+def matrix_at_t(trajs, t):
     m = []
     for traj in trajs:
-        traj=np.unwrap(traj)
         m.append(traj[t])
-    return m
-    
-def produce_histograms(npts=1e6,repetitions=1000,free=False,drift=False,periodic=False,tilted_periodic=False,load=False,file_name=None):
-    x0 = np.ones(repetitions)*np.pi
-    
-    time_select = [1*int(npts/10),4*int(npts/10),7*int(npts/10),int(npts -1)]          
-    if free == True:
-        free = LangevinSimulator(dt=1e-4)
-        t0 = time.time()
-        if load == False:
-            
-            trajs = free.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 0, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
-            
-        else:    
-            trajs = np.load(f'{file_name}')
-        #trajs = np.unwrap(trajs)
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)
-        A=0
-            
-    if drift == True:
-        drift = LangevinSimulator(dt=1e-4,torque=10)
-        if load == False:
+    return np.array(m)
+
+def plot_histograms(npts=1e6, repetitions=1000, free=False, drift=False, periodic=False, tilted_periodic=False, load=False, file_name=None):
+    x0 = np.zeros(repetitions) 
+    time_select = [1 * int(npts/10), 4 * int(npts/10), 7 * int(npts/10), int(npts - 1)]
+              
+    if free:
+        free_sim = LangevinSimulator(dt=1e-4)
+        if not load:
             t0 = time.time()
-            trajs = drift.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 0, torque = 0,iteration = 0, save = False, print_time = False, plots = False)        
+            trajs = free_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=0, torque=0, iteration=0, save=True, print_time=False, plots=False)
+            print(f'Generate done in {time.time() - t0:.1f} s')
         else:
-
-            trajs = np.load(f'{file_name}')
+            t1 = time.time()
+            trajs = np.load(file_name)
+            print(f'Load done in {time.time() - t1:.1f} s')
             
-        trajs = np.unwrap(trajs)    
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)    
-        A=1
-            
-    if periodic == True:
-        periodic = LangevinSimulator(dt=1e-4,torque=0)
-        if load == False:
-            trajs = periodic.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 1, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
+    elif drift:
+        drift_sim = LangevinSimulator(dt=1e-4, torque=10)
+        if not load:
+            t0 = time.time()
+            trajs = drift_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=0, torque=10, iteration=0, save=False, print_time=False, plots=False)        
+            print(f'Generate done in {time.time() - t0:.1f} s')
         else:
-            trajs = np.load(f'{file_name}')
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)
-        A=2
+            t1 = time.time()
+            trajs = np.load(file_name)
+            print(f'Load done in {time.time() - t1:.1f} s')
             
-    if tilted_periodic == True:
-        tilted_periodic = LangevinSimulator(dt=1e-4,torque=10)
-        if load == False:
-            trajs = tilted_periodic.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = int(npts), x0 = x0, Amplitude = 4, torque = 0,iteration = 0, save = False, print_time = False, plots = False)
+    elif periodic:
+        periodic_sim = LangevinSimulator(dt=1e-4, torque=0)
+        if not load:
+            trajs = periodic_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=1, torque=0, iteration=0, save=False, print_time=False, plots=False)
         else:
-            trajs = np.load(f'{file_name}')  
-        matrixes = []
-        for t in time_select:
-            m = matrix_at_t(trajs,t)
-            matrixes.append(m)
-        A=3
-
-    np.save(f'matrixes,repetitions,{A}',matrixes)
-
-def plot_quadrant_hist(matrixes,time_select,repetitions,mu,D,torque,amplitude):
-
-    def normal_theory(mu, t, x, D):
-        """
-        Theoretical probability density function for a free Brownian particle
-        """
-        # Calculate the standard deviation
-        sigma = np.sqrt(2 * D * t)
-
-        # Theoretical Gaussian distribution
-        p_theory = (1 / (np.sqrt(2 * np.pi) * sigma)) * np.exp(- ((x - mu)**2) / (2 * sigma**2))
-        
-        return p_theory     
+            trajs = np.load(file_name)
+            
+    elif tilted_periodic:
+        tilted_periodic_sim = LangevinSimulator(dt=1e-4, torque=10)
+        if not load:
+            trajs = tilted_periodic_sim.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=4, torque=0, iteration=0, save=False, print_time=False, plots=False)
+        else:
+            trajs = np.load(file_name)
     
-    def defaveri_theory(mu, t, x, D):
-        tiltedperiodic = LangevinSimulator(dt=1e-4,torque=torque)
-        D_eff = tiltedperiodic.lifson_jackson_noforce(amplitude)
-        """
-        Theoretical probability density function for a Brownian particle in a potential.
-        """
-        # Calculate the standard deviation
-        sigma = np.sqrt(2 * D * t)
-        sigma_eff = np.sqrt(2 * D_eff * t)
-
-        # Theoretical Gaussian distribution
-        p_theory = (1 / (np.sqrt(2 * np.pi) * sigma)) * np.exp(- ((x - mu)**2) / (2 * sigma_eff**2))*tiltedperiodic.integrand1(x,amplitude)
-        
-        return p_theory
-          
+    # Ensure trajectories are unwrapped only once
+    trajs = np.unwrap(trajs)
+    
+    # Collect matrices at selected times
+    matrixes = [matrix_at_t(trajs, t) for t in time_select]
+    
+    # Determine the histogram bounds
     all_data = np.concatenate(matrixes)
     x_min, x_max = np.min(all_data), np.max(all_data)
-    y_min, y_max = 0, max([np.histogram(m, bins=int(repetitions/2),density=True)[0].max() for m in matrixes])
-
+    y_min, y_max = 0, max([np.histogram(m, bins=100)[0].max() for m in matrixes])
+    
     # Plotting histograms in quadrants
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    labels = [f't = {time_select[0] * 1e-4}s', f't = {time_select[1] * 1e-4}s', f't = {time_select[2] * 1e-4}s', f't = {math.ceil(time_select[3] * 1e-4)}s']
-    axs = axs.flatten()
-
-    for idx, m in enumerate(matrixes):
-        t = time_select[idx]*1e-4
-        axs[idx].hist(m, bins=int(repetitions/6), alpha=0.7,density=True)
-        (mu, sigma) = norm.fit(m)
-        xmin, xmax = axs[idx].get_xlim()
-        x = np.linspace(xmin, xmax, 100)
-        p_fit = norm.pdf(x, mu, sigma)
-        if amplitude == 0:
-            p_theory = normal_theory(mu,t,x,D)
-        else :
-            p_theory = defaveri_theory(mu,t,x,D)
-        axs[idx].plot(x, p_fit, 'k', linewidth=2)
-        axs[idx].plot(x, p_theory ,linestyle='--', color = 'r', linewidth=2)
-        axs[idx].set_title(f'Time {labels[idx]}')
-        axs[idx].set_xlim(x_min, x_max)
-        axs[idx].set_ylim(y_min, y_max)
-        axs[idx].set_xlabel('angle [rad]')
-        axs[idx].set_ylabel('Occur.')
-        axs[idx].xaxis.set_major_formatter(plt.FuncFormatter(lambda val, pos: '{:.2f}'.format(val)))
-
+    plt.figure(figsize=(10, 6))
+    colors = viridis(np.linspace(0, 1, len(time_select)))
+    labels = [f't = {t * 1e-4:.0f}s' for t in time_select]
+    
+    num_bins = 40
+    for idx, (m, color) in enumerate(zip(matrixes, colors)):
+        hist_data, bins = np.histogram(m, bins=num_bins, density=True)
+        bin_centers = (bins[:-1] + bins[1:]) / 2
+        plt.plot(bin_centers, hist_data, 'o', color=color, label=labels[idx])
+    
+        #(mu, sigma) = norm.fit(m)
+        #(drift_sim.torque*drift_sim.KT/drift_sim.gamma)*time_select[idx]*drift_sim.dt
+        v_eff = (drift_sim.torque*drift_sim.KT/(drift_sim.gamma*2*np.pi))
+        (mu, sigma) = (v_eff*time_select[idx]*drift_sim.dt, np.sqrt(2*drift_sim.D*time_select[idx]*drift_sim.dt))
+        x = np.linspace(bins[0], bins[-1], num_bins)
+        p = norm.pdf(x, mu, sigma)
+        plt.plot(x, p, '-', color=color, linewidth=2)
+    
+    plt.xlabel('Position [rad]', fontsize=14)
+    plt.ylabel('Density', fontsize=14)
+    plt.legend(fontsize=12)
     plt.tight_layout()
+    plt.savefig('superimposed_histogram_drift_diff.png', dpi=300)
     plt.show()
 
-npts = 1e6
-time_select = [1*int(npts/10),4*int(npts/10),7*int(npts/10),int(npts -1)] 
-"""
-produce_histograms(tilted_periodic=True, load=False, file_name='0ite_trajectories_1000000,nb_traj_1000points_amplitude_0kT,frequency_10_dt_0.0001_torque_0kT.npy')
-produce_histograms(periodic=True, load=False, file_name='0ite_trajectories_1000000,nb_traj_1000points_amplitude_0kT,frequency_10_dt_0.0001_torque_0kT.npy') 
-"""
-def final_plot_hist_free():       
-    matrixes_free = np.load('matrixes,repetitions,0.npy')
-    free = LangevinSimulator(dt=1e-4)
-    D = free.D
-    plot_quadrant_hist(matrixes_free,time_select,1000,mu=np.pi,D=D,torque=0,amplitude=0)
+#plot_histograms(free=True, load=True, file_name='0ite_trajectories_1000000,nb_traj_1000points_amplitude_0kT,frequency_10_dt_0.0001_torque_0kT.npy')
 
 
-def final_plot_hist_drift():       
-    matrixes_drift = np.load('matrixes,repetitions,1.npy')
-    drift = LangevinSimulator(dt=1e-4)
-    D = drift.D
-    plot_quadrant_hist(matrixes_drift,time_select,1000,mu=np.pi,D=D,torque=10,amplitude=0)
 
 
-def final_plot_hist_periodic():       
-    matrixes_periodic = np.load('matrixes,repetitions,2.npy')
-    A = 1
-    periodic = LangevinSimulator(dt=1e-4)
-    D_eff = periodic.lifson_jackson_noforce(1)
-    plot_quadrant_hist(matrixes_periodic,time_select,1000,mu=np.pi,D=D_eff,torque=0,amplitude=A)
 
-def final_plot_hist_tiltedperiodic():       
-    matrixes_tiltedperiodic = np.load('matrixes,repetitions,3.npy')
-    A = 1
-    tiltedperiodic = LangevinSimulator(dt=1e-4,torque=0)
-    D = tiltedperiodic.D
-    plot_quadrant_hist(matrixes_tiltedperiodic,time_select,1000,mu=np.pi,D=D,torque=0,amplitude=A)
 
-final_plot_hist_tiltedperiodic()
+

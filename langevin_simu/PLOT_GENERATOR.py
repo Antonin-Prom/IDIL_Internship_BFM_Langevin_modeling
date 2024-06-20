@@ -1,10 +1,12 @@
 from  Langevin_Class_v3 import *
-from  Histogram_all_v2 import *
+
+free_diff = LangevinSimulator(dt=1e-4, torque = 0, x0 = 0,analytical = False)
 
 """
 Plot 1: Free Diffusion Trajectories
 """
-free_diff = LangevinSimulator(dt=1e-4, torque = 0, x0 = 0,analytical = False)
+
+
 free_diff.configure_plots()
 
 label_fontsize = 18
@@ -121,102 +123,6 @@ def free_MSD():
 
 
 
-"""
-Plot 4: Free Diffusion Histogram
-"""
-
-
-def matrix_at_t(trajs,t):
-    m = []
-    for traj in trajs:
-        traj=np.unwrap(traj)
-        m.append(traj[t])
-    return m
-    
-def plot_histograms(npts=1e6, repetitions=1000, free=False, drift=False, periodic=False, tilted_periodic=False, load=False, file_name=None):
-    x0 = np.ones(repetitions) * np.pi
-    time_select = [1 * int(npts / 10), 4 * int(npts / 10), 7 * int(npts / 10), int(npts - 1)]
-    
-    if free:
-        free = LangevinSimulator(dt=1e-4)
-        if not load:
-            t0 = time.time()
-            trajs = free.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=0, torque=0, iteration=0, save=False, print_time=False, plots=False)
-            print(f'Generate done in {time.time() - t0:.1f} s')
-        else:
-            t1 = time.time()
-            trajs = np.load(f'{file_name}')
-        matrixes = [matrix_at_t(trajs, t) for t in time_select]
-        print(f'Load done in {time.time() - t1:.1f} s')
-    
-    if drift:
-        drift = LangevinSimulator(dt=1e-4, torque=10)
-        if not load:
-            t0 = time.time()
-            trajs = drift.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=0, torque=0, iteration=0, save=False, print_time=False, plots=False)
-            print(f'Generate done in {time.time() - t0:.1f} s')
-        else:
-            t1 = time.time()
-            trajs = np.load(f'{file_name}')
-        trajs = np.unwrap(trajs)
-        matrixes = [matrix_at_t(trajs, t) for t in time_select]
-        print(f'Load done in {time.time() - t1:.1f} s')
-    
-    if periodic:
-        periodic = LangevinSimulator(dt=1e-4, torque=0)
-        if not load:
-            trajs = periodic.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=1, torque=0, iteration=0, save=False, print_time=False, plots=False)
-        else:
-            trajs = np.load(f'{file_name}')
-        trajs = np.unwrap(trajs)
-        matrixes = [matrix_at_t(trajs, t) for t in time_select]
-    
-    if tilted_periodic:
-        tilted_periodic = LangevinSimulator(dt=1e-4, torque=10)
-        if not load:
-            trajs = tilted_periodic.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts=int(npts), x0=x0, Amplitude=4, torque=0, iteration=0, save=False, print_time=False, plots=False)
-        else:
-            trajs = np.load(f'{file_name}')
-        trajs = np.unwrap(trajs)
-        matrixes = [matrix_at_t(trajs, t) for t in time_select]
-    
-    all_data = np.concatenate(matrixes)
-    x_min, x_max = np.min(all_data), np.max(all_data)
-    y_min, y_max = 0, max([np.histogram(m, bins=repetitions)[0].max() for m in matrixes])
-    
-    # Plotting histograms in quadrants
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    labels = [f't = {time_select[0] * 1e-4}s', f't = {time_select[1] * 1e-4}s', f't = {time_select[2] * 1e-4}s', f't = {time_select[3] * 1e-4}s']
-    axs = axs.flatten()
-    
-    colors = viridis(np.linspace(0, 1, 4))
-    
-    for idx, m in enumerate(matrixes):
-        axs[idx].hist(m, bins=int(repetitions), alpha=0.7, density=True, color=colors[idx])
-        (mu, sigma) = norm.fit(m)
-        xmin, xmax = axs[idx].get_xlim()
-        x = np.linspace(xmin, xmax, 100)
-        p = norm.pdf(x, mu, sigma)
-        axs[idx].plot(x, p, 'k', linewidth=2, label='Fitted Normal Distribution')
-        axs[idx].set_title(f'Time {labels[idx]}', fontsize=label_fontsize)
-        axs[idx].set_xlim(x_min, x_max)
-        axs[idx].set_ylim(y_min, y_max)
-        axs[idx].set_xlabel('Position', fontsize=label_fontsize)
-        axs[idx].set_ylabel('Frequency', fontsize=label_fontsize)
-        axs[idx].legend(fontsize=legend_fontsize)
-    
-    plt.tight_layout()
-    plt.savefig('free_histograms.png', dpi=300)
-    plt.show()
-
-plot_histograms(free=True, load=False, file_name='0ite_trajectories_1000000,nb_traj_1000points_amplitude_0kT,frequency_10_dt_0.0001_torque_0kT.npy')
-
-
-
-
-
-
-
 
 
 """
@@ -225,11 +131,36 @@ drift velocity:
     Quadrant with potential, histogramm or Diffusion coeff compare to force, drift velocity, MSD
 """
 
+"""
+Critical tilt
+"""
 
-
-
-
-
+"""
+D_eff(F)
+"""
+j = LangevinSimulator(dt=1e-4)
+ampl_arr = np.array([10,15,20,25])/2
+colors= viridis(np.linspace(0,1,len(ampl_arr)))
+tilt_arr = np.arange(0,10)
+all_D_eff = []
+for A in ampl_arr:
+    D_eff = []
+    for tilt in tilt_arr:
+        tilt_sim = LangevinSimulator(dt=1e-5,torque=tilt)
+        print(tilt_sim.torque)
+        D = tilt_sim.lifson_jackson(A)
+        D_eff.append(D/j.D)
+    all_D_eff.append(D_eff)
+    
+plt.figure()        
+for idx,A in enumerate(ampl_arr):
+    plt.plot(tilt_arr, all_D_eff[idx], label='Numerical MSD', color=colors[idx],linewidth=4)
+    
+plt.xlabel('F',fontsize=label_fontsize)
+plt.ylabel('D_eff',fontsize=label_fontsize)
+plt.tight_layout()
+plt.savefig('D_eff(F)', dpi=300)
+plt.show()
 
 
 
