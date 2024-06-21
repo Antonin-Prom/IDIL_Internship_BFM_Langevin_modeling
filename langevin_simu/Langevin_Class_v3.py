@@ -302,7 +302,7 @@ class LangevinSimulator:
     """
 
     def integrand1(self, x, amplitude):
-        return np.exp(amplitude*np.sin(x*self.frequency))
+        return np.exp(amplitude*np.sin(x*self.frequency)-self.torque/(2*np.pi))
     
     def full_integrand(self,x,amplitude):
         return np.exp(-self.analytical_potential(x, amplitude))
@@ -321,11 +321,30 @@ class LangevinSimulator:
             lifson_jackson1 = self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
             return lifson_jackson1
         else:
-            F = self.torque/(2*np.pi) #KT already taken in acount
+            F = self.torque/(2*np.pi) #KT already taken in acount            
             lifson_jackson2 = (self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))) * ((np.sinh(F*(2*np.pi / self.frequency)/2))/(F*(2*np.pi / self.frequency)/2))**2
             return lifson_jackson2            
  
-    
+    def D_eff_reimann(self,amplitude):
+        a = 2 * np.pi / self.frequency
+        A = amplitude
+        
+        def I_plus(x):
+            result, _ = quad(self.full_integrand, x - a, x, args=(A))
+            return (1 / self.D) * self.full_integrand(x, -A) * result
+        
+        def I_minus(x):
+            result, _ = quad(self.full_integrand, x , x + a, args=(-A))
+            return (1 / self.D) * self.full_integrand(x, A) * result
+        
+        
+        I_plus_integral, _ = quad(lambda x: I_plus(x)**2 * I_minus(x), 0, a)
+        I_minus_integral, _ = quad(I_minus, 0, a)
+        
+        D_f = (self.D * (2 * np.pi / a) * I_plus_integral) / (I_minus_integral**3)
+        
+        return D_f
+        
     
     def normalised_loglog_msd_fit(self,ampl_range,npts,msd_nbpt):
         

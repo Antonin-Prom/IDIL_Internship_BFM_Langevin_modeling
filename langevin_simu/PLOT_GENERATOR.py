@@ -138,31 +138,95 @@ Critical tilt
 """
 D_eff(F)
 """
-j = LangevinSimulator(dt=1e-4)
-ampl_arr = np.array([10,15,20,25])/2
+def D_eff_f_theo():
+    j = LangevinSimulator(dt=1e-4)
+    ampl_arr = np.array([10,15,20,25])/2
+    colors= viridis(np.linspace(0,1,len(ampl_arr)))
+    tilt_arr = np.arange(0,100)
+    all_D_eff = []
+    for A in ampl_arr:
+        D_eff = []
+        for tilt in tilt_arr:
+            tilt *= -1
+            tilt_sim = LangevinSimulator(dt=1e-5,torque=tilt)
+            D = tilt_sim.D_eff_reimann(A)
+            D_eff.append(D/j.D)
+        all_D_eff.append(D_eff)
+        
+    plt.figure()        
+    for idx,A in enumerate(ampl_arr):
+        plt.plot(tilt_arr, all_D_eff[idx], label='Numerical MSD', color=colors[idx],linewidth=4)
+        
+    plt.xlabel('F',fontsize=label_fontsize)
+    plt.ylabel('D_eff',fontsize=label_fontsize)
+    plt.tight_layout()
+    plt.savefig('D_eff(F)', dpi=300)
+    plt.show()
+
+
+j = LangevinSimulator(dt=1e-4,frequency=10)
+ampl_arr = np.array([0.1])
 colors= viridis(np.linspace(0,1,len(ampl_arr)))
-tilt_arr = np.arange(0,10)
+
+
+
+def linear_msd(t, D):
+    return 2 * D * t
 all_D_eff = []
-for A in ampl_arr:
+for A in tqdm(ampl_arr, desc="Amplitude loop"):
+    F_c = 2 * np.pi * j.frequency * A
+    tilt_arr = np.linspace(F_c / 2, 1.5 * F_c, 10)
     D_eff = []
-    for tilt in tilt_arr:
-        tilt_sim = LangevinSimulator(dt=1e-5,torque=tilt)
-        print(tilt_sim.torque)
-        D = tilt_sim.lifson_jackson(A)
-        D_eff.append(D/j.D)
+    D_theo = []
+    for tilt in tqdm(tilt_arr, desc=f"Tilt loop for A={A}", leave=False):
+        d = LangevinSimulator(dt=1e-5, torque=tilt, frequency=10)
+        time_axis, mean_msd = d.brutal_msd(repetition=3, N=int(1e7), Amplitude=A, x0=[0], ide=0, msd_nbpt=500, time_end=1/4, save=False)
+        time_axis *= d.dt
+        
+        
+        
+        popt, _ = scipy.optimize.curve_fit(linear_msd, time_axis, mean_msd)
+        D_fit = popt[0]
+        D_eff.append(D_fit)
+        D_theo.append(d.D_eff_reimann(A))
     all_D_eff.append(D_eff)
+    np.save(f'D_eff(F)_A={A}', [tilt_arr, D_eff])
+    plt.plot(tilt_arr, D_eff,color='green')
+    plt.plot(tilt_arr, D_theo, color='blue')
     
-plt.figure()        
-for idx,A in enumerate(ampl_arr):
-    plt.plot(tilt_arr, all_D_eff[idx], label='Numerical MSD', color=colors[idx],linewidth=4)
-    
-plt.xlabel('F',fontsize=label_fontsize)
-plt.ylabel('D_eff',fontsize=label_fontsize)
-plt.tight_layout()
-plt.savefig('D_eff(F)', dpi=300)
-plt.show()
+"""
+A = 10 / 2
+time_axis *= d.dt
+a = 2 * np.pi / d.frequency
+D_eff = d.lifson_jackson(A)
 
+# Viridis colors
+viridis = plt.cm.viridis
+colors = viridis(np.linspace(0, 1, 100))
 
+# Functions
+def linear_msd(t, D):
+    return 2 * D * t
+
+def boltz_exp(A, x):
+    return np.exp(-d.analytical_potential(x, A))
+
+def defaveri_stationary(A):
+    X = np.linspace(-a / 6, a / 6, 1000)
+    Y = boltz_exp(A, X)
+    Z = np.mean(Y)
+    return np.mean((X ** 2) * Y) / Z
+
+# Calculation
+min_absciss_value = 1
+window_indices = np.where(time_axis > min_absciss_value)[0]
+qstat = defaveri_stationary(A)
+equi = np.ones(len(time_axis)) * qstat
+
+# Fit
+popt, _ = scipy.optimize.curve_fit(linear_msd, time_axis[window_indices], mean_msd[window_indices])
+D_fit = popt[0]
+"""
 
     
     

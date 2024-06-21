@@ -186,7 +186,10 @@ def plot_trajs(free=False,drift=False,periodic=False,tilted_periodic=False):
         periodic.run_parallel_numba(repetitions=50, n_jobs=5, npts = int(1e7), x0 = x0, Amplitude = 1, torque = 0,iteration = 0, save = False, print_time = False, plots = True)
     
     if tilted_periodic == True:
-        tilted_periodic = LangevinSimulator(dt=1e-4,torque=10)
+        Amplitude = 5
+        freq = 10
+        F_c = 2*np.pi*Amplitude*freq
+        tilted_periodic = LangevinSimulator(dt=1e-4,torque=F_c)
         tilted_periodic.run_parallel_numba(repetitions=50, n_jobs=5, npts = int(1e7), x0 = x0, Amplitude = 4, torque = 0,iteration = 0, save = False, print_time = False, plots = True)
 
 import seaborn as sns
