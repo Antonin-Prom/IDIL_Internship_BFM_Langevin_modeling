@@ -122,8 +122,54 @@ def free_MSD():
     plt.show()
 
 
-
-
+""" 
+Periodic MSD
+"""
+def periodic_msd():
+    p = LangevinSimulator(dt=1e-4, frequency=10)
+    a = 2 * np.pi / p.frequency
+    
+    def linear_msd(t, D):
+        return 2 * D * t
+    
+    def defaveri_stationary(A):
+        X = np.linspace(0, a, 1000)
+        Y = boltz_exp(A, X)
+        Z = np.mean(Y)
+        return np.mean((X**2) * Y) / Z
+    
+    def boltz_exp(A, x):
+        return np.exp(-(A / 2) * np.sin(x * p.frequency))
+    
+    t_box, msd_box = np.load('langevin_simu\A=0,4,6,18_t,msd_10000000npts_30rep_torque_0kT_dt=0.0001,bead.npy')
+    A_box = [0, 4, 6, 18]
+    colors = viridis(np.linspace(0, 1, len(A_box)))
+    
+    plt.figure()
+    for idx, (t, msd) in enumerate(zip(t_box, msd_box)):
+        print(idx)
+        t *= 1e-4
+        color = colors[idx]
+        if idx < 1:
+            min_absciss_value = 0
+        else:
+            min_absciss_value = 10
+        window_indices = np.where(t > min_absciss_value)[0]
+        D_eff = p.lifson_jackson(A_box[idx])
+        
+        label = fr'$V_0 = {A_box[idx]} \, kT, \, D_{{eff}}/D_r = {D_eff / p.D:.2f}$'   
+        plt.loglog(t, msd, label=label, color=color)
+        if idx<3:
+            plt.loglog(t[window_indices], linear_msd(t, D_eff)[window_indices], linestyle='--', color='black')
+        else:
+            quasi_stat = defaveri_stationary(A_box[idx])
+            plt.loglog(t,np.ones(len(t))*quasi_stat,color = 'red',linestyle='--')
+    plt.xlabel('Lag time (s)', fontsize=label_fontsize)
+    plt.ylabel('MSD (rad²)', fontsize=label_fontsize)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('periodic_msd.png', dpi=300)
+    plt.show()
 
 """
 Tilted periodic potential
@@ -131,9 +177,149 @@ drift velocity:
     Quadrant with potential, histogramm or Diffusion coeff compare to force, drift velocity, MSD
 """
 
+def msd_periodic_tilted():
+
+    def parabolic_msd(t, D, v_eff):
+        return 2 * D * t + v_eff*t**2
+    def linear_msd(t, D):
+        return 2 * D * t
+
+    def boltz_exp(A, x):
+        return np.exp(-(A / 2) * np.sin(x * p.frequency))
+
+    #t_box0, msd_box0 = np.load('langevin_simu\A=0,4,6,18_t,msd_10000000npts_30rep_torque_0kT_dt=0.0001,bead.npy')
+    t_box, msd_box10 = np.load('langevin_simu\A=0,4,6,18_t,msd_10000000npts_30rep_torque_10kT_dt=1e-05,bead.npy')
+    t_box, msd_box50 = np.load('langevin_simu\A=0,4,6,18_t,msd_10000000npts_30rep_torque_50kT_dt=1e-05,bead.npy')
+    t_box, msd_box100 = np.load('langevin_simu\A=0,4,6,18_t,msd_10000000npts_30rep_torque_100kT_dt=1e-05,bead.npy')
+
+    A_box = [0, 4, 6, 18]
+    tilt_box = [10,50,100]
+    t_boxbox = [t_box,t_box,t_box]
+    #Only A = 6KT:
+    j=3
+    msd_boxbox = [msd_box10[j],msd_box50[j],msd_box100[j]]
+    colors = viridis(np.linspace(0, 1, len(A_box)))
+    t = t_box[0]
+    t *= 1e-5
+    plt.figure()
+
+    for idt,tilt in enumerate(tilt_box):
+        
+        msd = msd_boxbox[idt]
+        color = colors[idt]
+        p = LangevinSimulator(dt=1e-4, frequency=10,torque=tilt)
+        F_c =  p.frequency * A_box[j]/2
+        print('F_c',F_c)
+        if j < 1:
+            min_absciss_value = 0
+        else:
+            min_absciss_value = 10
+        window_indices = np.where(t > min_absciss_value)[0]
+        popt, _ = scipy.optimize.curve_fit(parabolic_msd, t, msd)
+        msd_no_parabolic = msd - popt[1]*t**2
+        popt, _ = scipy.optimize.curve_fit(parabolic_msd, t, msd_no_parabolic)
+        print('corrected_veff',popt[1])
+        D_f, _ = scipy.optimize.curve_fit(linear_msd, t, msd_no_parabolic)
+        D_eff = p.lifson_jackson(A_box[j])
+        print('D_f,D_eff',D_f/p.D)
+        label = fr'$V_0 = {A_box[j]}kT \, F = {tilt/(2*np.pi) :.0f}kT$'   
+        #plt.loglog(t, msd, label=label, color=color)
+        plt.loglog(t, msd, label=label, color=color)
+
+        #if j<3:
+            #plt.loglog(t[window_indices], linear_msd(t, D_eff)[window_indices], linestyle='--', color='black')
+
+    plt.xlabel('Lag time (s)', fontsize=label_fontsize)
+    plt.ylabel('MSD (rad²)', fontsize=label_fontsize)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('periodic_msd.png', dpi=300)
+    plt.show()
+
 """
 Critical tilt
 """
+
+# Define the potential U(x). Example: A sinusoidal potential
+def ReimanD_eff(particle,A,F):
+    def U(x):
+        return particle.analytical_potential(x,A)
+    # Constants (you should define these according to your problem)
+    L = 2 * np.pi/particle.frequency  # Period of the potential
+    D0 = particle.D  # Free diffusion coefficient
+
+
+    # Functions I_+(x) and I_-(x)
+    def I_plus(x):
+        return quad(lambda y: np.exp((U(x) - U(y) - F * (x - y)) ), 0, L)[0] / D0
+
+    def I_minus(x):
+        return quad(lambda y: np.exp(-(U(x) - U(y) - F * (x - y)) ), 0, L)[0] / D0
+
+    # Compute the integrals I_+ and I_-
+    x_values = np.linspace(0, L, 100)
+    I_plus_values = [I_plus(x) for x in x_values]
+    I_minus_values = [I_minus(x) for x in x_values]
+
+    # Numerically integrate I_+ and I_-
+    I_plus_integral = np.trapz(I_plus_values, x_values) / L
+    I_minus_integral = np.trapz(I_minus_values, x_values) / L
+
+    # Compute D_eff using equation (8)
+    D_eff = D0 * I_minus_integral / (I_plus_integral ** 3)
+    return D_eff
+
+A = 6
+
+F_c = 30*2*np.pi
+
+#F_box = np.concatenate([np.linspace(0, 2*F_c, 15), np.linspace(2*F_c, 6*F_c, 30)])
+F_box = np.linspace(0, 2*F_c, 15)
+def parabolic_msd(t, D, v_eff):
+    return 2 * D * t + v_eff*t**2
+def linear_msd(t, D):
+    return 2 * D * t
+
+#[t_box,msd_box] = [np.load(f'langevin_simu\\t,msd_10000000npts_20rep_torque_{F}kT_A=5.0,dt=1e-05,bead.npy') for F in F_box]
+msd_box=[]
+for F in F_box:
+    t,msd = np.load(f'langevin_simu\\t,msd_10000000npts_10rep_torque_{F}kT_dt=1e-05_A=5.0,bead,minus_mean.npy')
+    msd_box.append(msd)
+
+t*=1e-5
+D_fit_box = []
+D_theo_box = []
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+
+for id,msd in enumerate(msd_box):
+    F = F_box[id]
+    p = LangevinSimulator(dt=1e-4, frequency=10,torque=F)
+    #D_theo = p.lifson_jackson(A)
+    #D_theo_box.append(D_theo)
+    D_f, _ = scipy.optimize.curve_fit(linear_msd, t, msd)
+    D_fit_box.append(D_f/p.D)
+    ax1.loglog(t, msd)#label=f'F = {F/(2*np.pi):.0f}kT.$rad^-1$'
+    
+# Plot F vs D_fit
+ax2.plot(F_box, D_fit_box, 'o-')
+#ax2.plot(F_box, D_theo_box, 'o-')
+ax2.set_xlabel('F[kT.$rad^{-1}$]')
+ax2.set_ylabel('$D_{fit}$')
+print(D_theo_box)
+# Customize the subplots
+ax1.set_xlabel('Lag time [s]')
+ax1.set_ylabel('rad²')
+ax1.legend()
+ax1.set_title(r'Var($\theta$)')
+
+ax2.axvline(F_c, color='red', linestyle='--', linewidth=1)
+ax2.annotate('$F_c$', xy=(F_c, max(D_fit_box)), xytext=(F_c, max(D_fit_box)*1.1),
+             arrowprops=dict(facecolor='black', shrink=0.05),
+             horizontalalignment='center', verticalalignment='bottom')
+
+plt.tight_layout()
+plt.savefig('D_fit(F).png', dpi=300)
+plt.show()
 
 """
 D_eff(F)
@@ -163,36 +349,37 @@ def D_eff_f_theo():
     plt.savefig('D_eff(F)', dpi=300)
     plt.show()
 
+def D_eff(F):
+    j = LangevinSimulator(dt=1e-4,frequency=10)
+    ampl_arr = np.array([5])
+    colors= viridis(np.linspace(0,1,len(ampl_arr)))
 
-j = LangevinSimulator(dt=1e-4,frequency=10)
-ampl_arr = np.array([0.1])
-colors= viridis(np.linspace(0,1,len(ampl_arr)))
 
-
-
-def linear_msd(t, D):
-    return 2 * D * t
-all_D_eff = []
-for A in tqdm(ampl_arr, desc="Amplitude loop"):
-    F_c = 2 * np.pi * j.frequency * A
-    tilt_arr = np.linspace(F_c / 2, 1.5 * F_c, 10)
-    D_eff = []
-    D_theo = []
-    for tilt in tqdm(tilt_arr, desc=f"Tilt loop for A={A}", leave=False):
-        d = LangevinSimulator(dt=1e-5, torque=tilt, frequency=10)
-        time_axis, mean_msd = d.brutal_msd(repetition=3, N=int(1e7), Amplitude=A, x0=[0], ide=0, msd_nbpt=500, time_end=1/4, save=False)
-        time_axis *= d.dt
+    all_D_eff = []
+    for A in tqdm(ampl_arr, desc="Amplitude loop"):
+        F_c = 2 * np.pi * j.frequency * A
+        tilt_arr = np.linspace(F_c / 2, 1.5 * F_c, 5)
         
-        
-        
-        popt, _ = scipy.optimize.curve_fit(linear_msd, time_axis, mean_msd)
-        D_fit = popt[0]
-        D_eff.append(D_fit)
-        D_theo.append(d.D_eff_reimann(A))
-    all_D_eff.append(D_eff)
-    np.save(f'D_eff(F)_A={A}', [tilt_arr, D_eff])
-    plt.plot(tilt_arr, D_eff,color='green')
-    plt.plot(tilt_arr, D_theo, color='blue')
+        D_eff = []
+        D_theo = []
+        for tilt in tqdm(tilt_arr, desc=f"Tilt loop for A={A}", leave=False):
+            d = LangevinSimulator(dt=1e-5, torque=tilt, frequency=10)
+            time_axis, mean_msd = d.brutal_msd(repetition=5, N=int(1e7), Amplitude=A, x0=[0], ide=0, msd_nbpt=500, time_end=1/4, save=False)
+            time_axis *= d.dt
+            v_eff = tilt * j.KT / j.gamma
+            mean_msd_no_parabolic = [mean_msd[j] - (time_axis[j]**2 * v_eff**2) for j,_ in enumerate(mean_msd)]
+            
+            plt.loglog(time_axis,mean_msd,color='salmon')
+            plt.loglog(time_axis,mean_msd_no_parabolic,color='blue')
+            popt, _ = scipy.optimize.curve_fit(linear_msd, time_axis, mean_msd_no_parabolic)
+            D_fit = popt[0]
+            D_eff.append(D_fit)
+            D_theo.append(d.D_eff_reimann(A))
+        all_D_eff.append(D_eff)
+        np.save(f'D_eff(F)_A={A}', [tilt_arr, D_eff])
+        #plt.plot(tilt_arr, D_eff,color='green')
+        #plt.plot(tilt_arr, D_theo, color='blue')
+        plt.show()
     
 """
 A = 10 / 2

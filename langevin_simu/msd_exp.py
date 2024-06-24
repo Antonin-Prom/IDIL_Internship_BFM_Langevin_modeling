@@ -114,9 +114,12 @@ class LangevinSimulator:
         mean_msd = np.concatenate(([0],np.mean(msd_box, axis=0)))
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         if save == True:
-            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},cylinder',[time_axis,mean_msd])
+            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_A={A},dt={self.dt},bead',[time_axis,mean_msd])
         return time_axis,mean_msd
-    
+    """
+        for f in F_box:
+            d = LangevinSimulator(dt=1e-5,torque=f)
+            d.brutal_msd(repetition=20,N=int(1e7),Amplitude=A)"""
     def brutal_msd_amplitude_range(self,ampl_range=[0,5,10,20],repetition=None,N=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
         time_box,mean_msd_box = [],[]
         for A in ampl_range:

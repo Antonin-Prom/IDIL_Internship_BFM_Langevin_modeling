@@ -34,6 +34,39 @@ def single_msd(traj, total_lag_time):
         msd_results[i] = msd
     return msd_results
 
+@njit(parallel=True)
+def single_msd_minus_mean_v_eff(traj, total_lag_time,effective_velocity):
+    
+    msd_results = np.zeros_like(total_lag_time, dtype=np.float64)
+    num_points = len(traj)
+    
+    for i in range(len(total_lag_time)):
+        lag = total_lag_time[i]
+        if lag >= num_points:
+            break
+        
+        deterministic_displacement = effective_velocity * lag
+        
+        msd = np.mean((traj[:-lag] - (traj[lag:] - deterministic_displacement)) ** 2)
+        msd_results[i] = msd
+    
+    return msd_results
+
+@njit(parallel=True)
+def single_msd_minus_mean(traj, total_lag_time, effective_velocity):
+    msd_results = np.zeros_like(total_lag_time, dtype=np.float64)
+    num_points = len(traj)
+    
+    for i in range(len(total_lag_time)):
+        lag = total_lag_time[i]
+        if lag >= num_points:
+            break
+        displacements = traj[lag:] - traj[:-lag]
+        mean_displacement = np.mean(displacements)
+        squared_diff = (displacements - mean_displacement) ** 2
+        msd_results[i] = np.mean(squared_diff)
+    return msd_results
+
 class LangevinSimulator:
      
     def __init__(self,frequency = 10, torque = 0, dt = None, x0 = 0, analytical = True):
@@ -55,11 +88,11 @@ class LangevinSimulator:
         self.x0 = x0
         self.analytical = analytical
         self.x_pot = np.linspace(0, 2*np.pi, 50000)
-    
+        self.effective_velocity = (self.torque/(2*np.pi)*self.KT)/self.gamma
     
 
     def configure_plots(self):
-        sns.set(style="whitegrid")
+        sns.set_theme(style="whitegrid")
         plt.rcParams['figure.figsize'] = [8, 6]
         plt.rcParams['font.size'] = 12
         plt.rcParams['axes.titlesize'] = 14
@@ -72,7 +105,7 @@ class LangevinSimulator:
         periodic sinusoidal potential, ampl and tilt in KT units
         return array
         '''
-        U = ampl/2*self.KT*np.sin(self.x_pot*self.frequency) - self.torque*self.x_pot*self.KT
+        U = ampl/2*self.KT*np.sin(self.x_pot*self.frequency) - self.torque*self.x_pot*self.KT/(2*np.pi)
         if plots:
             plt.figure('make_potential_sin', clear=True)
             plt.plot(self.x_pot, U/self.KT, ',')
@@ -111,13 +144,29 @@ class LangevinSimulator:
             np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead',[time_axis,mean_msd])
         return time_axis,mean_msd
     
-    def brutal_msd_amplitude_range(self,ampl_range=[0,5,10,20],repetition=None,N=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
+    def brutal_msd_minus_mean(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
+        t0 = time.time()
+        msd_box = []
+        U = self.make_potential_sin(ampl = Amplitude) 
+        for i in range(repetition):
+            traj = self.main_traj_( N, Amplitude, U, x0, ide )
+            msd_box.append(self.msd_minus_mean(traj, time_end=time_end, msd_nbpt = msd_nbpt, print_time=False))
+            print(f'MSD done in {time.time() - t0:.1f} s')
+            del traj
+        max_lagtime = int(N * time_end)
+        mean_msd = np.concatenate(([0],np.mean(msd_box, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        if save == True:
+            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt}_A={Amplitude},bead,minus_mean',[time_axis,mean_msd])
+        return time_axis,mean_msd
+    
+    def brutal_msd_amplitude_range(self,ampl_range=[0,4,6,18],repetition=None,N=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
         time_box,mean_msd_box = [],[]
         for A in ampl_range:
             time_axis,mean_msd = self.brutal_msd(repetition=repetition,N=N,Amplitude=A,x0=x0,ide=ide,msd_nbpt = msd_nbpt, time_end=time_end,save=save)
             time_box.append(time_axis)
             mean_msd_box.append(mean_msd)
-        np.save(f'A=0,5,10,20,t,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},cylindric',[time_box,mean_msd_box])
+        np.save(f'A=0,4,6,18_t,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead',[time_box,mean_msd_box])
         return time_box,mean_msd_box
     
     def run_parallel_numba(self, repetitions=None, n_jobs=5, npts = int(1e5), x0 = None, Amplitude = None, torque = 0,iteration = 0, save = False, print_time = False, plots = False):
@@ -197,12 +246,22 @@ class LangevinSimulator:
         t0 = time.time()
         max_lagtime = int(len(traj) * time_end)
         total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
-        msd_results = single_msd(traj, total_lag_time)
+        msd_results = single_msd_minus_mean(traj, total_lag_time,self.effective_velocity)
         if print_time==True:
             print(f'MSD_numba done in {time.time() - t0:.1f} s')
         
         return msd_results 
+    
+    def msd_minus_mean(self, traj, time_end=1/4, msd_nbpt = 500,print_time=False):
+        traj = np.unwrap(traj)
+        t0 = time.time()
+        max_lagtime = int(len(traj) * time_end)
+        total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
+        msd_results = single_msd(traj, total_lag_time)
+        if print_time==True:
+            print(f'MSD_numba done in {time.time() - t0:.1f} s')
         
+        return msd_results    
     def mean_msd_and_time(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 500, nb_traj = None):
         """
         Compute the msd for a set of trajectories, than mean the msds.
@@ -302,7 +361,7 @@ class LangevinSimulator:
     """
 
     def integrand1(self, x, amplitude):
-        return np.exp(amplitude*np.sin(x*self.frequency)-self.torque/(2*np.pi))
+        return np.exp((amplitude/2)*np.sin(x*self.frequency)-self.torque/(2*np.pi))
     
     def full_integrand(self,x,amplitude):
         return np.exp(-self.analytical_potential(x, amplitude))
