@@ -91,6 +91,7 @@ class LangevinSimulator:
         self.effective_velocity = (self.torque/(2*np.pi)*self.KT)/self.gamma
     
 
+    
     def configure_plots(self):
         sns.set_theme(style="whitegrid")
         plt.rcParams['figure.figsize'] = [8, 6]
@@ -128,12 +129,15 @@ class LangevinSimulator:
         x = _make_trace(x, N, dUdx, self.dt, self.gamma, thermnoise)   
         return x 
       
-    def brutal_msd(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):
+    def brutal_msd(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True,remove_mean=True):
         t0 = time.time()
         msd_box = []
         U = self.make_potential_sin(ampl = Amplitude) 
         for i in range(repetition):
             traj = self.main_traj_( N, Amplitude, U, x0, ide )
+            if remove_mean == True:
+                t = np.arange(len(traj))*self.dt
+                traj = traj - t*traj[-1]/t[-1]
             msd_box.append(self.msd(traj, time_end=time_end, msd_nbpt = msd_nbpt, print_time=False))
             print(f'MSD done in {time.time() - t0:.1f} s')
             del traj
@@ -141,7 +145,7 @@ class LangevinSimulator:
         mean_msd = np.concatenate(([0],np.mean(msd_box, axis=0)))
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         if save == True:
-            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead',[time_axis,mean_msd])
+            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead,removed_mean',[time_axis,mean_msd])
         return time_axis,mean_msd
     
     def brutal_msd_minus_mean(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):

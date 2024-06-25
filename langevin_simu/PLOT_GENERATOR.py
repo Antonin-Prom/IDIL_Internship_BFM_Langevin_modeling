@@ -269,12 +269,20 @@ def ReimanD_eff(particle,A,F):
     D_eff = D0 * I_minus_integral / (I_plus_integral ** 3)
     return D_eff
 
-A = 6
+def generate_msd_f_box():
+    p = LangevinSimulator(frequency=3,dt=1e-5)
+    A = 5
+    F_box = np.linspace(0,250,50)
+    for F in F_box:
+        p = LangevinSimulator(frequency=3,dt=1e-5,torque=F)
+        p.brutal_msd(repetition=5,N=int(1e7),Amplitude=A)
+A = 5
 
-F_c = 30*2*np.pi
+F_c = 3*2.5*2*np.pi
 
 #F_box = np.concatenate([np.linspace(0, 2*F_c, 15), np.linspace(2*F_c, 6*F_c, 30)])
-F_box = np.linspace(0, 2*F_c, 15)
+#F_box = np.linspace(0, 2*F_c, 15)
+F_box = np.linspace(0,250,50)
 def parabolic_msd(t, D, v_eff):
     return 2 * D * t + v_eff*t**2
 def linear_msd(t, D):
@@ -283,7 +291,7 @@ def linear_msd(t, D):
 #[t_box,msd_box] = [np.load(f'langevin_simu\\t,msd_10000000npts_20rep_torque_{F}kT_A=5.0,dt=1e-05,bead.npy') for F in F_box]
 msd_box=[]
 for F in F_box:
-    t,msd = np.load(f'langevin_simu\\t,msd_10000000npts_10rep_torque_{F}kT_dt=1e-05_A=5.0,bead,minus_mean.npy')
+    t,msd = np.load(f't,msd_10000000npts_5rep_torque_{F}kT_dt=1e-05,bead,removed_mean.npy')
     msd_box.append(msd)
 
 t*=1e-5
