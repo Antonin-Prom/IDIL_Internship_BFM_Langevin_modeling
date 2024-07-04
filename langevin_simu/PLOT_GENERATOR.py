@@ -269,39 +269,47 @@ def ReimanD_eff(particle,A,F):
     D_eff = D0 * I_minus_integral / (I_plus_integral ** 3)
     return D_eff
 
+"""
+Simulation parameters
+"""
+frequency = 3
+A = 30
+F_c = frequency*A*np.pi
+F_box = np.linspace(0.5*F_c,2*F_c,150)
+dt = 1e-5
+N =int(1e7)
+repetitions = 5
 def generate_msd_f_box():
-    p = LangevinSimulator(frequency=3,dt=1e-5)
-    A = 5
-    F_box = np.linspace(0,250,50)
     for F in F_box:
-        p = LangevinSimulator(frequency=3,dt=1e-5,torque=F)
-        p.brutal_msd(repetition=5,N=int(1e7),Amplitude=A)
-A = 5
-
-F_c = 3*2.5*2*np.pi
+        p = LangevinSimulator(frequency=frequency,dt=dt,torque=F)
+        p.brutal_msd(repetition=repetitions,N=N,Amplitude=A,id=F_c)
+#generate_msd_f_box()
 
 #F_box = np.concatenate([np.linspace(0, 2*F_c, 15), np.linspace(2*F_c, 6*F_c, 30)])
 #F_box = np.linspace(0, 2*F_c, 15)
-F_box = np.linspace(0,250,50)
+
 def parabolic_msd(t, D, v_eff):
     return 2 * D * t + v_eff*t**2
 def linear_msd(t, D):
     return 2 * D * t
 
 #[t_box,msd_box] = [np.load(f'langevin_simu\\t,msd_10000000npts_20rep_torque_{F}kT_A=5.0,dt=1e-05,bead.npy') for F in F_box]
+
 msd_box=[]
 for F in F_box:
-    t,msd = np.load(f't,msd_10000000npts_5rep_torque_{F}kT_dt=1e-05,bead,removed_mean.npy')
+    
+    file_path = f't,msd_10000000npts_5rep_torque_{F}kT_dt=1e-05,id_{F_c}_bead,removed_mean.npy'
+    t, msd = np.load(file_path)
     msd_box.append(msd)
 
-t*=1e-5
+t*=dt
 D_fit_box = []
 D_theo_box = []
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
 for id,msd in enumerate(msd_box):
     F = F_box[id]
-    p = LangevinSimulator(dt=1e-4, frequency=10,torque=F)
+    p = LangevinSimulator(dt=dt, frequency=frequency,torque=F)
     #D_theo = p.lifson_jackson(A)
     #D_theo_box.append(D_theo)
     D_f, _ = scipy.optimize.curve_fit(linear_msd, t, msd)

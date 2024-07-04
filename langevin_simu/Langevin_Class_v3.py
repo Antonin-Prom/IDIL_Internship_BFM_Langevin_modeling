@@ -129,7 +129,7 @@ class LangevinSimulator:
         x = _make_trace(x, N, dUdx, self.dt, self.gamma, thermnoise)   
         return x 
       
-    def brutal_msd(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True,remove_mean=True):
+    def brutal_msd(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True,remove_mean=True,id=None):
         t0 = time.time()
         msd_box = []
         U = self.make_potential_sin(ampl = Amplitude) 
@@ -145,7 +145,7 @@ class LangevinSimulator:
         mean_msd = np.concatenate(([0],np.mean(msd_box, axis=0)))
         time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
         if save == True:
-            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},bead,removed_mean',[time_axis,mean_msd])
+            np.save(f't,msd_{N}npts_{repetition}rep_torque_{self.torque}kT_dt={self.dt},id_{id}_bead,removed_mean',[time_axis,mean_msd])
         return time_axis,mean_msd
     
     def brutal_msd_minus_mean(self,repetition=None,N=None,Amplitude=None,x0=[0],ide=0,msd_nbpt = 500, time_end=1/4,save=True):

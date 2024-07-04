@@ -11,6 +11,10 @@ from numba import njit
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 import seaborn as sns
+from matplotlib.cm import viridis
+label_fontsize = 18
+legend_fontsize=14
+viridis = plt.cm.viridis
 
 @njit
 def _make_trace(x, npts, dUdx, dt, gamma, thermnoise):
@@ -248,17 +252,64 @@ class LangevinSimulator:
         
     
 
-A = 10
-dt=1e-4
-N = int(1e7)
+A = 14
+dt=5e-5
+N = int(5e7)
+# --> Plateau entre 300 et 340_000 pt (a multiplier par dt)
 repetitions = 10
 msd_nbpt = 100
 x0 = np.zeros(repetitions)
 obj = LangevinSimulator(dt=dt,torque=0,frequency=10)
-#trajs = obj.run_parallel_numba(repetitions=repetitions, n_jobs=5, npts = N, x0 = x0, Amplitude = A, torque = 0,iteration = 0, save = True, print_time = False, plots = False)
-#msd_matrix = 
-t,msds = obj.brutal_msd(repetition=repetitions,N=N,Amplitude=A,x0=[0],ide=0,msd_nbpt = msd_nbpt, time_end=1/3,save=True,remove_mean=False,distrib_log=False)
-plt.loglog(t,msds)
+ide = 0
+trajs = []
+for i in range(repetitions):
+    U = obj.make_potential_sin(ampl=A) 
+    traj = np.unwrap(obj.main_traj_(N, A, U, x0, ide))
+    trajs.append(traj)
+np.save(f'trajs_A={A}_dt={dt}_N={N}_rep={repetitions}_defaveri_plateau',trajs)
+
+trajs = np.load(f'trajs_A={A}_dt={dt}_N={N}_rep={repetitions}_defaveri_plateau.npy')
+lag_N_begin = 300
+lag_N_end = 340000
+lag_time = np.linspace((lag_N_begin),(lag_N_end),msd_nbpt)
+
+def mean_msd_in_lag_range():
+    msd_box = []
+    for traj in trajs:
+        msd_for_one_traj = single_msd(traj, lag_time)
+        msd_box.append(msd_for_one_traj) 
+    mean_msd = np.mean(msd_box, axis=0)
+    return mean_msd
+mean_msd = mean_msd_in_lag_range()
+
+
+@njit
+def matrix_at_t(trajs, t):
+    m = []
+    for traj in trajs:
+        m.append(traj[t])
+    return np.array(m)
+
+time_select = lag_time
+matrixes = [matrix_at_t(trajs, t) for t in time_select]
+
+all_data = np.concatenate(matrixes)
+plt.figure(figsize=(10, 6))
+colors = viridis(np.linspace(0, 1, len(time_select)))
+labels = [f't = {t * dt:.0f}s, msd = {mean_msd[idx]}' for idx,t in enumerate(time_select)]
+
+num_bins = 100
+for idx, (m, color) in enumerate(zip(matrixes, colors)):
+    hist_data, bins = np.histogram(m, bins=num_bins, density=True)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    plt.plot(bin_centers, hist_data, 'o', color=color, label=labels[idx])
+
+
+
+#t,msds = obj.brutal_msd(repetition=repetitions,N=N,Amplitude=A,x0=[0],ide=0,msd_nbpt = msd_nbpt, time_end=1/3,save=True,remove_mean=False,distrib_log=True)
+
+plt.xscale('log')
+plt.yscale('log')
 plt.show()
 
 
