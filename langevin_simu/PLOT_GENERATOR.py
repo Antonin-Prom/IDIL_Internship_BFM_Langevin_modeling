@@ -180,8 +180,7 @@ p = LangevinSimulator(dt=1e-4, frequency=10)
 a = 2 * np.pi / p.frequency
 
 # Corrected bellour_fit function to return MSD
-def bellour_fit(t, delta, alpha, D_eff):
-    return 2 * delta **2 * (1 - np.exp((p.D * t / delta**2)**alpha))**(1 - alpha) * (1 + D_eff * t / delta**2)
+
 
 # Load data
 t_box, msd_box = np.load('A=0,4,6,18_t,msd_10000000npts_10rep_torque_0kT_dt=0.0001,bead.npy')
@@ -197,24 +196,7 @@ for idx, (t, msd) in enumerate(zip(t_box, msd_box)):
     D_LJ = p.lifson_jackson(A_box[idx])
     print('D_LJ', D_LJ)
     
-    # Modify the curve_fit to fix D_eff = D_LJ
-    def bellour_fit_fixed_D_eff(t, delta, alpha):
-        return bellour_fit(t, delta, alpha, D_LJ)
-    
-    # Provide initial guesses for delta and alpha
-    initial_guess = [0.1, 1]  # You might need to adjust these values based on your data
-
-    try:
-        #popt, pcov = curve_fit(bellour_fit_fixed_D_eff, t, msd, p0=initial_guess, maxfev=10000)
-        #delta, alpha = popt[0], popt[1]
-        delta, alpha = initial_guess[0],initial_guess[1]
-        D_eff = D_LJ
-        label = fr'$V_0 = {A_box[idx]} \, kT, \, D_{{eff}}/D_r = {D_eff / p.D:.2f}$'
-        
-        plt.loglog(t, msd, label=label, color=color)
-        plt.loglog(t, bellour_fit(t, delta, alpha, D_eff), 'red', linestyle='--')
-    except RuntimeError as e:
-        print(f"Fit did not converge for A = {A_box[idx]}: {e}")
+    p.fit_msd_Bellour( msd_time = t, msd = msd, plots=True, plots_clear=True)
 
 plt.xlabel('Lag time (s)', fontsize=12)
 plt.ylabel('MSD (rad²)', fontsize=12)

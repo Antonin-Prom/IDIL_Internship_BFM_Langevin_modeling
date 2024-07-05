@@ -490,7 +490,27 @@ class LangevinSimulator:
             plt.legend()
             plt.show()
 
-            
+    def fit_msd_Bellour(self, msd_time, msd, plots=False, plots_clear=True):
+            ''' differeretial evolution fit of MSD with Bellour function 
+                see Perez et al. "On the Time Transition Between Short- and Long-Time Regimes of Colloidal Particles in External Periodic Potentials". Frontiers in physics 2021 doi: 10.3389/fphy.2021.635269
+            '''
+            import utils
+            def MSD_bellour(t, delta2, D0, alpha, DM):
+                ''' Perez et al 2021, eq.5 '''
+                return np.log(2*delta2*(1 - np.exp(-(D0*t/delta2)**alpha))**(1/alpha) * (1 + DM*t/delta2))
+            bounds = [(1e-12, 1), (1e-12, self.D*3), (1e-12, 1), (1e-12, self.D)]
+            popt = utils.diff_evolution_fit(msd_time, np.log(msd), MSD_bellour, bounds=bounds, popsize=20, maxiter=3000, tol=0.001)
+            print(f'fit_msd_Bellour(): delta2, D0, alpha, DM = {popt}')
+            if plots:
+                fig = plt.figure('fit_msd_Bellour', clear=plots_clear)
+                ax1 = fig.add_subplot(111) if fig.axes==[] else fig.axes[0]
+                ax1.plot(msd_time, msd, 'o', mfc='none', ms=5, label='Simulation')
+                ax1.plot(msd_time, np.exp(MSD_bellour(msd_time, *popt)), '--', lw=2, label='Bellour eq. fit')
+                ax1.set_xlabel('Lag time (s)')
+                ax1.set_ylabel(r'MSD (rad$^2$)')
+                ax1.set_xscale('log')
+                ax1.set_yscale('log')
+                ax1.legend()        
             
     def fit_and_plot_msd(self, time_axis_boxbox, mean_msd_boxbox, ampl_range, torque_range):
         """
