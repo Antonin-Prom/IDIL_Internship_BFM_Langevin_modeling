@@ -313,7 +313,35 @@ plt.yscale('log')
 plt.show()
 
 
+def fit_bellour():
+    p = LangevinSimulator(dt=1e-4, frequency=10)
+    a = 2 * np.pi / p.frequency
 
+    # Corrected bellour_fit function to return MSD
+
+
+    # Load data
+    t_box, msd_box = np.load('A=0,4,6,18_t,msd_10000000npts_10rep_torque_0kT_dt=0.0001,bead.npy')
+    A_box = [0, 4, 6, 18]
+    colors = viridis(np.linspace(0, 1, len(A_box)))
+
+    plt.figure()
+    for idx, (t, msd) in enumerate(zip(t_box, msd_box)):
+        print(idx)
+        t *= 1e-4
+        color = colors[idx]
+
+        D_LJ = p.lifson_jackson(A_box[idx])
+        print('D_LJ', D_LJ)
+        
+        p.fit_msd_Bellour( msd_time = t, msd = msd, plots=True, plots_clear=True)
+
+    plt.xlabel('Lag time (s)', fontsize=12)
+    plt.ylabel('MSD (rad²)', fontsize=12)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('periodic_msd.png', dpi=300)
+    plt.show()
 
 
 

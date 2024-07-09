@@ -163,47 +163,75 @@ def periodic_msd():
             plt.loglog(t[window_indices], linear_msd(t, D_eff)[window_indices], linestyle='--', color='black')
         else:
             quasi_stat = defaveri_stationary(A_box[idx])
-            plt.loglog(t,np.ones(len(t))*quasi_stat,color = 'red',linestyle='--')
+            #plt.loglog(t,np.ones(len(t))*quasi_stat,color = 'red',linestyle='--')
     plt.xlabel('Lag time (s)', fontsize=label_fontsize)
     plt.ylabel('MSD (rad²)', fontsize=label_fontsize)
     plt.legend()
     plt.tight_layout()
     plt.savefig('periodic_msd.png', dpi=300)
     plt.show()
+#periodic_msd()
 
 
+
+
+def plot_potential(F,Amplitude):
+    
+    viridis = plt.cm.viridis
+    colors = viridis(np.linspace(0, 1, 10))
+    p = LangevinSimulator(dt=1e-4,torque = F*np.pi)
+    print(p.torque)
+    U = p.make_potential_sin(ampl = Amplitude) 
+    plt.plot(np.linspace(0, 2*np.pi, len(U)), U/p.KT,color=colors[6],label=f'V0 = {Amplitude}kT, F = {F:.1f}kT')
+    plt.ylim(-15,15)
+    plt.xlim(-2,5)
+    plt.ylabel('Potential [KT]')
+    plt.xlabel('angle [rad]')
+    plt.legend()
+    plt.savefig(f'periodic_potential_A={Amplitude},F={F:.2}.png', dpi=300)
+
+
+frequency = 4
+Amplitude = 1
+F_c = frequency*Amplitude*np.pi
+F_box = np.linspace(0,F_c,7)
+for F in F_box:
+    plot_potential(F,Amplitude)
+    plt.clf()
+    
 """
 Bellour fit
 """
-#def periodic_msd_bellour_fit():
-p = LangevinSimulator(dt=1e-4, frequency=10)
-a = 2 * np.pi / p.frequency
 
-# Corrected bellour_fit function to return MSD
+def fit_bellour():
+    p = LangevinSimulator(dt=1e-4, frequency=10)
+    a = 2 * np.pi / p.frequency
+
+    # Corrected bellour_fit function to return MSD
 
 
-# Load data
-t_box, msd_box = np.load('A=0,4,6,18_t,msd_10000000npts_10rep_torque_0kT_dt=0.0001,bead.npy')
-A_box = [0, 4, 6, 18]
-colors = viridis(np.linspace(0, 1, len(A_box)))
+    # Load data
+    t_box, msd_box = np.load('A=0,4,6,18_t,msd_10000000npts_10rep_torque_0kT_dt=0.0001,bead.npy')
+    A_box = [0, 4, 6, 18]
+    colors = viridis(np.linspace(0, 1, len(A_box)))
 
-plt.figure()
-for idx, (t, msd) in enumerate(zip(t_box, msd_box)):
-    print(idx)
-    t *= 1e-4
-    color = colors[idx]
+    plt.figure()
+    for idx, (t, msd) in enumerate(zip(t_box, msd_box)):
+        print(idx)
+        t *= 1e-4
+        color = colors[idx]
 
-    D_LJ = p.lifson_jackson(A_box[idx])
-    print('D_LJ', D_LJ)
-    
-    p.fit_msd_Bellour( msd_time = t, msd = msd, plots=True, plots_clear=True)
+        D_LJ = p.lifson_jackson(A_box[idx])
+        print('D_LJ', D_LJ)
+        
+        p.fit_msd_Bellour( msd_time = t, msd = msd, plots=True, plots_clear=True)
 
-plt.xlabel('Lag time (s)', fontsize=12)
-plt.ylabel('MSD (rad²)', fontsize=12)
-plt.legend()
-plt.tight_layout()
-plt.savefig('periodic_msd.png', dpi=300)
-plt.show()
+    plt.xlabel('Lag time (s)', fontsize=12)
+    plt.ylabel('MSD (rad²)', fontsize=12)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('periodic_msd.png', dpi=300)
+    plt.show()
 
 """
 Tilted periodic potential
@@ -306,7 +334,9 @@ def ReimanD_eff(particle,A,F):
 """
 Simulation parameters
 """
-
+label_fontsize = 18
+legend_fontsize=14
+viridis = plt.cm.viridis
 def main_diffusion_enhancement():
     frequency = 3
     A = 30
@@ -315,34 +345,35 @@ def main_diffusion_enhancement():
     dt = 1e-5
     N =int(1e7)
     repetitions = 5
+
     def generate_msd_f_box():
         for F in F_box:
             p = LangevinSimulator(frequency=frequency,dt=dt,torque=F)
             p.brutal_msd(repetition=repetitions,N=N,Amplitude=A,id=F_c)
     #generate_msd_f_box()
-    
+
     #F_box = np.concatenate([np.linspace(0, 2*F_c, 15), np.linspace(2*F_c, 6*F_c, 30)])
     #F_box = np.linspace(0, 2*F_c, 15)
-    
+
     def parabolic_msd(t, D, v_eff):
         return 2 * D * t + v_eff*t**2
     def linear_msd(t, D):
         return 2 * D * t
-    
+
     #[t_box,msd_box] = [np.load(f'langevin_simu\\t,msd_10000000npts_20rep_torque_{F}kT_A=5.0,dt=1e-05,bead.npy') for F in F_box]
-    
+
     msd_box=[]
     for F in F_box:
         
         file_path = f't,msd_10000000npts_5rep_torque_{F}kT_dt=1e-05,id_{F_c}_bead,removed_mean.npy'
         t, msd = np.load(file_path)
         msd_box.append(msd)
-    
+
     t*=dt
     D_fit_box = []
     D_theo_box = []
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 8))
+
     for id,msd in enumerate(msd_box):
         F = F_box[id]
         p = LangevinSimulator(dt=dt, frequency=frequency,torque=F)
@@ -350,29 +381,34 @@ def main_diffusion_enhancement():
         #D_theo_box.append(D_theo)
         D_f, _ = scipy.optimize.curve_fit(linear_msd, t, msd)
         D_fit_box.append(D_f/p.D)
-        ax1.loglog(t, msd)#label=f'F = {F/(2*np.pi):.0f}kT.$rad^-1$'
-        
+        D_theo_box.append(p.D_eff_reimann(A)/p.D)
+
     # Plot F vs D_fit
-    ax2.plot(F_box, D_fit_box, 'o-')
-    #ax2.plot(F_box, D_theo_box, 'o-')
-    ax2.set_xlabel('F[kT.$rad^{-1}$]')
-    ax2.set_ylabel('$D_{fit}$')
+    ax1.plot(F_box, D_fit_box, 'o')
+    ax1.plot(F_box,D_theo_box)
+
+    ax1.set_xlabel('F[kT.$rad^{-1}$]', fontsize = label_fontsize)
+    ax1.set_ylabel('$D_{fit}$', fontsize = label_fontsize)
     print(D_theo_box)
     # Customize the subplots
-    ax1.set_xlabel('Lag time [s]')
-    ax1.set_ylabel('rad²')
-    ax1.legend()
-    ax1.set_title(r'Var($\theta$)')
-    
-    ax2.axvline(F_c, color='red', linestyle='--', linewidth=1)
-    ax2.annotate('$F_c$', xy=(F_c, max(D_fit_box)), xytext=(F_c, max(D_fit_box)*1.1),
-                 arrowprops=dict(facecolor='black', shrink=0.05),
-                 horizontalalignment='center', verticalalignment='bottom')
-    
-    plt.tight_layout()
-    plt.savefig('D_fit(F).png', dpi=300)
-    plt.show()
 
+    X = np.linspace(-np.pi,np.pi,1000)
+    U = (A/2)*np.sin(X*frequency) - F_c/(2*np.pi)*X
+    ax2.plot(X,U)
+    ax2.set_xlabel('rad', fontsize = label_fontsize)
+    ax2.set_ylabel('U[kT]',fontsize = label_fontsize)
+    ax2.legend()
+
+    ax1.axvline(F_c, color='red', linestyle='--', linewidth=1)
+    ax1.annotate('$F_c$', xy=(F_c, max(D_fit_box)), xytext=(F_c, max(D_fit_box)*1.1),
+                arrowprops=dict(facecolor='black', shrink=0.05),fontsize = label_fontsize,
+                horizontalalignment='center', verticalalignment='bottom')
+
+    plt.tight_layout()
+    plt.savefig('D_fit(F)_theory.png', dpi=300)
+    plt.show()
+    
+#main_diffusion_enhancement()
 
 """
 MSD fitting
