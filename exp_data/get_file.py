@@ -5,11 +5,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from  Langevin_Class_v3 import *
+from tqdm import tqdm
+from numba import jit
+#from  Dynamic_Langevin import *
 viridis = plt.cm.viridis
 
 
 def load():
-    data = torch.load('exp_data/trajectory.pt')
+    data = torch.load('trajectory.pt')
     return data
 
 def traj_array():
@@ -50,15 +53,6 @@ def fit_super_diffusion(x_data, y_data):
 
 
 
-#exp_parameter:
-T_K = 273 + 22
-FPS = 2000
-dt_s = 1/FPS
-space_ratio = 0.095e-6 #m/px
-colors = viridis(np.linspace(0, 1, 10))
-p = LangevinSimulator(dt=1e-5)
-
-# initialising array
 def exp_traj():
 
     x,y = traj_array()
@@ -68,6 +62,80 @@ def exp_traj():
     theta_traj = convert_to_angle(x,y)
     t = np.arange(0,len(theta_traj),1)*dt_s
     return t,theta_traj,x,y
+
+@jit(nopython=True)
+def find_opposite_index(theta_traj, theta_i, epsilon=np.pi/180):
+    """
+    Find indices where the angle is approximately theta_i + pi or theta_i - pi
+    """
+    target_angles = [(theta_i + np.pi) % (2 * np.pi), (theta_i - np.pi) % (2 * np.pi)]
+    indices = []
+    for i in range(len(theta_traj)):
+        theta = theta_traj[i]
+        for target_angle in target_angles:
+            if abs(theta - target_angle) < epsilon:
+                indices.append(i)
+                break
+    return indices
+
+@jit(nopython=True)
+def radial_distance_re_inner(t, theta_traj, x, y, epsilon):
+    """
+    Inner function to compute distances with Numba
+    """
+    distances = []
+    for i in range(len(theta_traj)):
+        theta_i = theta_traj[i]
+        opposite_indices = find_opposite_index(theta_traj, theta_i, epsilon)
+        if len(opposite_indices) > 0:
+            for opp_idx in opposite_indices:
+                dist = np.sqrt((x[i] - x[opp_idx]) ** 2 + (y[i] - y[opp_idx]) ** 2)
+                distances.append(dist)
+    return np.array(distances)
+
+def radial_distance_re(epsilon=np.pi/20):
+    """ 
+    Find the mean radial distance --> mean distance between two points with a pi angle difference
+    """
+    t, theta_traj, x, y = exp_traj()
+    distances = radial_distance_re_inner(t, theta_traj, x, y, epsilon)
+    return np.mean(distances)/2
+
+#exp_parameter:
+T_K = 273 + 22
+KT = T_K*1.3806452e-23
+FPS = 2000
+dt_s = 1/FPS
+space_ratio = 0.095e-6 #m/px
+colors = viridis(np.linspace(0, 1, 10))
+p = LangevinSimulator(dt=dt_s)
+p.KT = KT
+viscosity_NS_m2 = 0.001
+R_bead = (1.3/2)*1e-6 #m
+
+"""
+Using gamma equation from:
+Catch bond drives stator mechanosensitivity in the bacterial flagellar motor
+"""
+d_cell = 5*1e-9 #distance between bead and cell surface 
+ratio = R_bead/ (d_cell + R_bead)
+radial_dist = 1.0932736e-06 / 2 #to be changed 
+
+gamma_bead_rot = 8 * np.pi * viscosity_NS_m2 * R_bead**3
+
+gamma_rot_correction = gamma_bead_rot / np.abs(1 - (1/8) * ratio**3)
+
+gamma_bead_trans = 6 * np.pi * viscosity_NS_m2 * R_bead * radial_dist**2 
+
+gamma_trans_correction = gamma_bead_trans / np.abs(1 - (9/16)*ratio + (1/8)*ratio**3)
+
+gamma_tot = gamma_rot_correction + gamma_trans_correction
+D = KT/gamma_tot
+p.D = D
+
+
+
+
 
 def plot_traj():
     sns.set_theme(style="whitegrid")
@@ -127,6 +195,8 @@ def exp_msd_removed_mean_simulation_compared(plot=True):
     - fit D
     """
     p = LangevinSimulator(dt=dt_s)
+    p.gamma = gamma_tot
+    p.D = D
     t,traj,x,y = exp_traj()
     
     t = np.arange(len(traj))*p.dt
@@ -138,13 +208,15 @@ def exp_msd_removed_mean_simulation_compared(plot=True):
     total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])*p.dt
     if plot:
         p.configure_plots()
-        plt.loglog(total_lag_time,msd)
+        plt.loglog(total_lag_time,msd,label='MSD exp')
+        plt.loglog(total_lag_time,2*D*total_lag_time,linestyle='--',label='2*D*t')
         plt.xlabel('lag_time [s]')
         plt.ylabel('MSD [rad²]')
+        plt.legend()
         plt.show()
 
     plt.show() 
 
 #plot_traj()
-new_msd_removed_mean(plot=True)
+exp_msd_removed_mean_simulation_compared(plot=True)
 
