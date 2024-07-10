@@ -136,6 +136,15 @@ p.D = D
 
 
 
+t,theta_traj,x,y = exp_traj()
+traj = np.unwrap(theta_traj)
+    
+    
+   
+    
+
+    
+    
 
 def plot_traj():
     sns.set_theme(style="whitegrid")
@@ -146,11 +155,11 @@ def plot_traj():
     plt.rcParams['grid.color'] = 'gray'
     plt.rcParams['grid.alpha'] = 0
     t,theta_traj,x,y = exp_traj()
-    plt.scatter(x,y,s=0.01,color=colors[6])
+    #plt.scatter(x,y,s=0.01,color=colors[6])
+    plt.scatter(np.arange(len(theta_traj)),np.unwrap(theta_traj))
     plt.xlabel('x')
     plt.ylabel('y')
     plt.show()
-
 
 def plot_old_msd():
 # diffusion coefficient
@@ -187,7 +196,7 @@ def exp_msd_removed_mean(plot=True):
     plt.show() 
 
 
-def exp_msd_removed_mean_simulation_compared(plot=True):
+def exp_msd_simulation_compared(traj, plot=False):
     """
     TO DO :
     - Produce traj with removed mean with low amplitude and sufficient torque (V0 = 1kT, torque = 15kT ?)
@@ -197,10 +206,9 @@ def exp_msd_removed_mean_simulation_compared(plot=True):
     p = LangevinSimulator(dt=dt_s)
     p.gamma = gamma_tot
     p.D = D
-    t,traj,x,y = exp_traj()
+    
     
     t = np.arange(len(traj))*p.dt
-    traj = traj - t*traj[-1]/t[-1] # Removing the mean speed
     msd_nbpt = 500
     time_end = 1/4
     msd = p.msd(traj, time_end = time_end, msd_nbpt = msd_nbpt, print_time=False)
@@ -218,5 +226,183 @@ def exp_msd_removed_mean_simulation_compared(plot=True):
     plt.show() 
 
 #plot_traj()
-exp_msd_removed_mean_simulation_compared(plot=True)
+#exp_msd_removed_mean_simulation_compared(plot=True)
+
+
+def find_constant_derivative_slices(trajectory, min_length, plot=False, tolerance=1):
+    # Calculate the derivative of the trajectory
+    derivative = np.diff(trajectory)
+    
+    # Initialize the list of slices
+    slices = []
+    start_index = 0
+
+    # Iterate through the derivative array
+    for i in range(1, len(derivative)):
+        # Check if the change in derivative is within the tolerance
+        if abs(derivative[i] - derivative[i-min_length]) > tolerance:
+            # If the change exceeds the tolerance, create a slice
+            slices.append((start_index, i))
+            start_index = i
+    
+    # Add the last slice
+    slices.append((start_index, len(trajectory) - 1))
+    
+    if plot:
+        plt.figure(figsize=(10, 6))
+        plt.plot(trajectory, label='Trajectory')
+        
+        # Add vertical lines for slice boundaries
+        for start, end in slices:
+            plt.axvline(x=start, color='r', linestyle='--')
+            #plt.axvline(x=end, color='r', linestyle='--')
+        
+        plt.xlabel('Index')
+        plt.ylabel('Trajectory Value')
+        plt.title('Trajectory with Slice Boundaries')
+        plt.legend()
+        plt.show()
+    
+    return slices 
+
+#slices_index = find_constant_derivative_slices(traj,100,plot=True,tolerance=0.076)
+
+def constant_len_slices(trajectory, slice_length, plot=False):
+    # Initialize the list of slices
+    slices = []
+    start_index = 0
+
+    # Iterate through the trajectory array and create slices of constant length
+    for i in range(slice_length, len(trajectory), slice_length):
+        slices.append((start_index, i))
+        start_index = i
+
+    # Add the last slice if it's not empty
+    if start_index < len(trajectory):
+        slices.append((start_index, len(trajectory) - 1))
+
+    if plot:
+        plt.figure(figsize=(10, 6))
+        plt.plot(trajectory, label='Trajectory')
+
+        # Add vertical lines for slice boundaries
+        for start, end in slices:
+            plt.axvline(x=start, color='r', linestyle='--')
+            plt.axvline(x=end, color='r', linestyle='--')
+
+        plt.xlabel('Index')
+        plt.ylabel('Trajectory Value')
+        plt.title('Trajectory with Constant Length Slice Boundaries')
+        plt.legend()
+        plt.show()
+
+    return slices
+
+frequency=26
+
+def analytical_potential(x, V0 = float, torque = float):
+    U =  V0 / 2 * np.sin(x * frequency) - torque * x / (2 * np.pi)
+    print('UUUUUUUUUUUUUUUUUU',type(U),U)
+    return U
+
+def boltzman_integrand(x, V0, torque, sign):
+    return np.exp(sign * analytical_potential(x, V0, torque))
+
+def boltzman_integral(V0, torque, sign):
+    L = 2 * np.pi / frequency
+    result, _ = quad(boltzman_integrand, -L/2, L/2, args=(V0, torque, sign))
+    return result 
+
+def I_plus(x, V0, torque):
+    L = 2 * np.pi / frequency
+    result, _ = quad(boltzman_integrand, x - L, x, args=(V0, torque, 1))
+    return (1 / D) * np.exp(-analytical_potential(x, V0, torque)) * result
+
+def I_minus(x, V0, torque):
+    L = 2 * np.pi / frequency
+    result, _ = quad(boltzman_integrand, x, x + L, args=(V0, torque, -1))
+    return (1 / D) * np.exp(analytical_potential(x, V0, torque)) * result
+
+def D_eff_no_tilt(V0, torque=0):
+    """
+    Lifson, S. & Jackson, J. L. On the self-diffusion of ions in a polyelectrolyte solution.
+    The Journal of Chemical Physics 36, 2410–2414 (1962)
+    Return D_eff(V0)
+    """
+    L = 2 * np.pi / frequency
+    lifson_jackson1 = D * L**2 / (boltzman_integral(V0, torque, -1) * boltzman_integral(V0, torque, 1))
+    return lifson_jackson1
+
+def D_eff_tilt(V0, torque):
+    """
+    Reimann, P. et al. (2002). Diffusion in tilted periodic potentials: Enhancement, universality, and scaling. Physical Review E.
+    Return D_eff(V0,F)
+    """
+    L = 2 * np.pi / frequency
+    I_plus_minus_integral, _ = quad(lambda x: I_plus(x, V0, torque)**2 * I_minus(x, V0, torque), 0, L)
+    I_minus_integral, _ = quad(lambda x: I_minus(x, V0, torque), 0, L)
+    D_eff = (D * L * I_plus_minus_integral) / (I_minus_integral**3)
+    return D_eff
+
+# Example usage and plotting
+V0_box = np.arange(0, 1, 0.2)
+F_c = frequency * V0_box * np.pi
+F = np.linspace(0.5 * F_c, 1.5 * F_c, 200)
+
+for V0 in V0_box:
+    D_effs = []
+    for torque in F:
+        D_effs.append(D_eff_tilt(V0, torque))
+    plt.plot(F, D_effs, label=f'D_eff, V0={V0}kT')
+
+plt.xlabel('Torque')
+plt.ylabel('D_eff')
+plt.legend()
+plt.show()
+
+      
+def plot_traj_slices(traj, slice_length, plot=True):
+    slices_index = constant_len_slices(traj, slice_length, plot=True)
+    traj_slice_box = []
+    
+    for (i, j) in slices_index:
+        traj_slice = traj[i:j+1]  # include the end index
+        t = np.arange(len(traj_slice)) * dt_s
+        # Calculate the linear fit slope
+        slope = (traj_slice[-1] - traj_slice[0]) / (len(traj_slice) - 1)
+        # Remove the linear trend
+        traj_slice = traj_slice - (slope * t)
+        traj_slice -= traj_slice[0]  # Ensure the slice starts at zero
+        traj_slice_box.append(traj_slice)
+
+    # Merge the slices
+    merged_trajectory = np.concatenate(traj_slice_box)
+    total_time = np.arange(len(merged_trajectory)) * dt_s
+    
+    if plot:
+    # Plot the merged trajectory
+        plt.figure(figsize=(10, 6))
+        plt.plot(total_time, merged_trajectory, label='Merged Trajectory')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Adjusted Trajectory Value')
+        plt.title('Merged Trajectory with Linear Trend Removed')
+        plt.legend()
+        plt.show()
+    traj_slice_box.pop()
+    [exp_msd_simulation_compared(traj = traj_slice_box[i],plot=True) for i in range(len(traj_slice_box))]
+    return traj_slice_box
+
+#plot_traj_slices(traj,10000)
+
+
+
+#plot_traj_constant_der()
+
+
+
+
+
+
+
+
 
