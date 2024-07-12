@@ -138,10 +138,6 @@ p.D = D
 
 t,theta_traj,x,y = exp_traj()
 traj = np.unwrap(theta_traj)
-    
-    
-   
-    
 
     
     
@@ -305,59 +301,51 @@ def analytical_potential(x, V0 = float, torque = float):
     print('UUUUUUUUUUUUUUUUUU',type(U),U)
     return U
 
-def boltzman_integrand(x, V0, torque, sign):
-    return np.exp(sign * analytical_potential(x, V0, torque))
+def ReimanD_eff(V0, F):
+    
+    def U(x):
+        return V0 / 2 * np.sin(x * frequency) - F * x / (2 * np.pi)
 
-def boltzman_integral(V0, torque, sign):
-    L = 2 * np.pi / frequency
-    result, _ = quad(boltzman_integrand, -L/2, L/2, args=(V0, torque, sign))
-    return result 
+    L = 2 * np.pi / frequency  # Period of the potential
+    D0 = D  # Free diffusion coefficient
 
-def I_plus(x, V0, torque):
-    L = 2 * np.pi / frequency
-    result, _ = quad(boltzman_integrand, x - L, x, args=(V0, torque, 1))
-    return (1 / D) * np.exp(-analytical_potential(x, V0, torque)) * result
+    def I_plus(x):
+        return quad(lambda y: np.exp(U(x) - U(y) - F * (x - y)), 0, L)[0] / D0
 
-def I_minus(x, V0, torque):
-    L = 2 * np.pi / frequency
-    result, _ = quad(boltzman_integrand, x, x + L, args=(V0, torque, -1))
-    return (1 / D) * np.exp(analytical_potential(x, V0, torque)) * result
+    def I_minus(x):
+        return quad(lambda y: np.exp(-(U(x) - U(y) - F * (x - y))), 0, L)[0] / D0
 
-def D_eff_no_tilt(V0, torque=0):
-    """
-    Lifson, S. & Jackson, J. L. On the self-diffusion of ions in a polyelectrolyte solution.
-    The Journal of Chemical Physics 36, 2410–2414 (1962)
-    Return D_eff(V0)
-    """
-    L = 2 * np.pi / frequency
-    lifson_jackson1 = D * L**2 / (boltzman_integral(V0, torque, -1) * boltzman_integral(V0, torque, 1))
-    return lifson_jackson1
+    x_values = np.linspace(0, L, 100)
+    I_plus_values = [I_plus(x) for x in x_values]
+    I_minus_values = [I_minus(x) for x in x_values]
 
-def D_eff_tilt(V0, torque):
-    """
-    Reimann, P. et al. (2002). Diffusion in tilted periodic potentials: Enhancement, universality, and scaling. Physical Review E.
-    Return D_eff(V0,F)
-    """
-    L = 2 * np.pi / frequency
-    I_plus_minus_integral, _ = quad(lambda x: I_plus(x, V0, torque)**2 * I_minus(x, V0, torque), 0, L)
-    I_minus_integral, _ = quad(lambda x: I_minus(x, V0, torque), 0, L)
-    D_eff = (D * L * I_plus_minus_integral) / (I_minus_integral**3)
+    I_plus_integral = np.trapz(I_plus_values, x_values) / L
+    I_minus_integral = np.trapz(I_minus_values, x_values) / L
+
+    D_eff = D0 * I_minus_integral / (I_plus_integral ** 3)
     return D_eff
 
-# Example usage and plotting
-V0_box = np.arange(0, 1, 0.2)
-F_c = frequency * V0_box * np.pi
-F = np.linspace(0.5 * F_c, 1.5 * F_c, 200)
 
+
+
+# Example usage and plotting
+V0_box = np.arange(0,5,0.2)
+
+frequency = 26
+F_c_max = 5 *frequency*np.pi
 for V0 in V0_box:
+    F_c = frequency * V0 * np.pi
+    F_box = np.linspace(0, 1.5 * F_c_max, 50)
     D_effs = []
-    for torque in F:
-        D_effs.append(D_eff_tilt(V0, torque))
-    plt.plot(F, D_effs, label=f'D_eff, V0={V0}kT')
+    for torque in F_box:
+        p.D = D
+        p = LangevinSimulator(dt=1e-5,torque=torque,frequency=frequency)
+        D_effs.append(p.D_eff_reimann(V0)/D)
+    plt.plot(F_box, D_effs, label=f'D_eff, V0={V0:.1f}kT')
 
 plt.xlabel('Torque')
 plt.ylabel('D_eff')
-plt.legend()
+#plt.legend()
 plt.show()
 
       

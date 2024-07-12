@@ -337,6 +337,8 @@ Simulation parameters
 label_fontsize = 18
 legend_fontsize=14
 viridis = plt.cm.viridis
+
+
 def main_diffusion_enhancement():
     frequency = 3
     A = 30
