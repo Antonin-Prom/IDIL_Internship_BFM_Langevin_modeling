@@ -117,6 +117,7 @@ R_bead = (1.3/2)*1e-6 #m
 Using gamma equation from:
 Catch bond drives stator mechanosensitivity in the bacterial flagellar motor
 """
+
 d_cell = 5*1e-9 #distance between bead and cell surface 
 ratio = R_bead/ (d_cell + R_bead)
 radial_dist = 1.0932736e-06 / 2 #to be changed 
@@ -129,7 +130,12 @@ gamma_bead_trans = 6 * np.pi * viscosity_NS_m2 * R_bead * radial_dist**2
 
 gamma_trans_correction = gamma_bead_trans / np.abs(1 - (9/16)*ratio + (1/8)*ratio**3)
 
-gamma_tot = gamma_rot_correction + gamma_trans_correction
+Faxen_correction = False
+
+if Faxen_correction:
+    gamma_tot = gamma_rot_correction + gamma_trans_correction
+else: 
+    gamma_tot = gamma_bead_rot + gamma_bead_trans
 D = KT/gamma_tot
 p.D = D
 
@@ -220,7 +226,7 @@ def exp_msd_simulation_compared(traj, plot=False):
         plt.show()
 
     plt.show() 
-
+    return total_lag_time,msd
 #plot_traj()
 #exp_msd_removed_mean_simulation_compared(plot=True)
 
@@ -253,8 +259,8 @@ def find_constant_derivative_slices(trajectory, min_length, plot=False, toleranc
             plt.axvline(x=start, color='r', linestyle='--')
             #plt.axvline(x=end, color='r', linestyle='--')
         
-        plt.xlabel('Index')
-        plt.ylabel('Trajectory Value')
+        plt.xlabel('t [s]')
+        plt.ylabel('Trajectory angle unwrapped')
         plt.title('Trajectory with Slice Boundaries')
         plt.legend()
         plt.show()
@@ -296,6 +302,69 @@ def constant_len_slices(trajectory, slice_length, plot=False):
 
 frequency=26
 
+
+def plot_traj_slices(traj, slice_length, plot=True, plot_mean_msd = True,plot_msd_diff = True):
+    slices_index = constant_len_slices(traj, slice_length, plot=True)
+    
+    traj_slice_box = []
+    
+    
+    for (i, j) in slices_index:
+        print(i,j)
+        
+        traj_slice = traj[i:j]  
+        traj_slice -= traj_slice[1]
+        t = np.arange(len(traj_slice)) * dt_s
+        print('slope', traj_slice[-1] / t[-1] )
+        traj_slice = traj_slice - t * traj_slice[-1] / t[-1] 
+         
+        traj_slice_box.append(traj_slice)
+
+    # Merge the slices
+    merged_trajectory = np.concatenate(traj_slice_box)
+    total_time = np.arange(len(merged_trajectory)) * dt_s
+    
+    if plot:
+    # Plot the merged trajectory
+        plt.figure(figsize=(10, 6))
+        plt.plot(total_time, merged_trajectory, label='Merged Trajectory')
+        plt.xlabel('Time [s]')
+        plt.ylabel('Angle [╬rad')
+        plt.title('Merged Trajectory with Linear Trend Removed')
+        plt.legend()
+        plt.show()
+        
+    
+    traj_slice_box.pop()
+    msd_box = []
+    [msd_box.append(exp_msd_simulation_compared(traj = traj_slice_box[i],plot=False)) for i in range(len(traj_slice_box))]
+    mean_msd = np.mean(msd_box[1],axis=0)
+    total_lag_time = msd_box[0][0]
+        
+    if plot_mean_msd:    
+        plt.loglog(total_lag_time,mean_msd,label=f'MSD, slice_duration = {slice_length*dt_s:.1}')
+        plt.loglog(total_lag_time,2*D*total_lag_time,linestyle='--',label='2*D*t')
+        plt.xlabel('lag_time [s]')
+        plt.ylabel('MSD [rad²]')
+        plt.legend()
+        
+    if plot_msd_diff:
+        diff_msd = np.diff(mean_msd,1)
+        plt.loglog(total_lag_time[:-1],diff_msd,label='MSD_diff')
+        plt.xlabel('lag_time [s]')
+        plt.ylabel('diff_MSD [rad²/s]')
+        plt.legend()
+    return traj_slice_box
+
+plot_traj_slices(traj,10000)
+
+
+
+
+
+
+
+
 def analytical_potential(x, V0 = float, torque = float):
     U =  V0 / 2 * np.sin(x * frequency) - torque * x / (2 * np.pi)
     print('UUUUUUUUUUUUUUUUUU',type(U),U)
@@ -327,60 +396,29 @@ def ReimanD_eff(V0, F):
 
 
 
-
-# Example usage and plotting
-V0_box = np.arange(0,5,0.2)
-
-frequency = 26
-F_c_max = 5 *frequency*np.pi
-for V0 in V0_box:
-    F_c = frequency * V0 * np.pi
-    F_box = np.linspace(0, 1.5 * F_c_max, 50)
-    D_effs = []
-    for torque in F_box:
-        p.D = D
-        p = LangevinSimulator(dt=1e-5,torque=torque,frequency=frequency)
-        D_effs.append(p.D_eff_reimann(V0)/D)
-    plt.plot(F_box, D_effs, label=f'D_eff, V0={V0:.1f}kT')
-
-plt.xlabel('Torque')
-plt.ylabel('D_eff')
-#plt.legend()
-plt.show()
-
+"""
+def plot_theoretical_Deff_range_V0():
+    V0_box = np.arange(0,5,0.2)
+    
+    frequency = 26
+    F_c_max = 5 *frequency*np.pi
+    for V0 in V0_box:
+        F_c = frequency * V0 * np.pi
+        F_box = np.linspace(0, 1.5 * F_c_max, 50)
+        D_effs = []
+        for torque in F_box:
+            p.D = D
+            p = LangevinSimulator(dt=1e-5,torque=torque,frequency=frequency)
+            D_effs.append(p.D_eff_reimann(V0)/D)
+        plt.plot(F_box, D_effs, label=f'D_eff, V0={V0:.1f}kT')
+    
+    plt.xlabel('Torque')
+    plt.ylabel('D_eff')
+    #plt.legend()
+    plt.show()
+"""
       
-def plot_traj_slices(traj, slice_length, plot=True):
-    slices_index = constant_len_slices(traj, slice_length, plot=True)
-    traj_slice_box = []
-    
-    for (i, j) in slices_index:
-        traj_slice = traj[i:j+1]  # include the end index
-        t = np.arange(len(traj_slice)) * dt_s
-        # Calculate the linear fit slope
-        slope = (traj_slice[-1] - traj_slice[0]) / (len(traj_slice) - 1)
-        # Remove the linear trend
-        traj_slice = traj_slice - (slope * t)
-        traj_slice -= traj_slice[0]  # Ensure the slice starts at zero
-        traj_slice_box.append(traj_slice)
 
-    # Merge the slices
-    merged_trajectory = np.concatenate(traj_slice_box)
-    total_time = np.arange(len(merged_trajectory)) * dt_s
-    
-    if plot:
-    # Plot the merged trajectory
-        plt.figure(figsize=(10, 6))
-        plt.plot(total_time, merged_trajectory, label='Merged Trajectory')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Adjusted Trajectory Value')
-        plt.title('Merged Trajectory with Linear Trend Removed')
-        plt.legend()
-        plt.show()
-    traj_slice_box.pop()
-    [exp_msd_simulation_compared(traj = traj_slice_box[i],plot=True) for i in range(len(traj_slice_box))]
-    return traj_slice_box
-
-#plot_traj_slices(traj,10000)
 
 
 
