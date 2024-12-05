@@ -3,7 +3,7 @@
 Created on Fri Mar 22 09:52:36 2024
 
 Class particle v2
-r
+
 - Simulate large trajectories
 - Compute MSD
 - Compute mean MSD 
@@ -18,34 +18,108 @@ from joblib import Parallel, delayed
 import time
 from scipy.interpolate import interp1d
 import scipy
+from numba import njit
+
+
+
+
+
+
+
+@njit
+def _make_trace(x, npts, dUdx, dt, gamma, thermnoise):
+    ''' part of the Langevin simulation, called by TiltedPeriodicDiffusion.make_trace() for numba acceleration '''
+    for i in range(npts - 1):
+        # idx of dUdx(x[i]):
+        dUdx_idxi = int(np.round(x[i]*len(dUdx)/(2*np.pi)) - 1)
+        force = -dUdx[dUdx_idxi]
+        # Langevin eq:
+        x[i+1] = x[i] + force*dt/gamma + thermnoise[i]
+        x[i+1] = np.mod(x[i+1], 2*np.pi)
+        #if np.isnan(x[i]): print(dUdx_idxi, force)
+    return x
+
+
+@njit(parallel=True)
+def single_msd(traj, total_lag_time):
+    msd_results = np.zeros_like(total_lag_time, dtype=np.float64)
+    for i in range(len(total_lag_time)):
+        lag = total_lag_time[i]
+        msd = np.mean((traj[:-lag] - traj[lag:]) ** 2)
+        msd_results[i] = msd
+    return msd_results
 
 class DiffusionSimulation2:
-    def __init__(self,frequency = 26, torque = 0, dt = None):
+    
+                  # periodic potential spatial variable 
+
+
+    def __init__(self,frequency = 10, torque = 0, dt = None, x0 = 0, analytical = True):
         # Constants
-        self.T_K = 300
-        self.k_b = 1.3806452e-23
+        self.KT = 300*1.3806452e-23
+        
         self.R_m = 1e-6
         self.m_kg = 1.1e-14 
         self.viscosity_NS_m2 = 0.001
         self.load = 6 * np.pi * self.viscosity_NS_m2 * self.R_m 
-        self.rotational_drag = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
+        self.gamma = 8 * np.pi * self.viscosity_NS_m2 * self.R_m**3
         self.moment_inertia = (2/5)*self.m_kg*self.R_m**2
-        self.tau = self.moment_inertia / self.rotational_drag
-        self.einstein_diffusion = self.k_b * self.T_K / self.load
-        self.rotational_einstein_diff = self.k_b * self.T_K / self.rotational_drag
-        self.dt_s = dt # tau
+        self.tau = self.moment_inertia / self.gamma
+        self.D = self.KT / self.gamma
+        self.dt = dt # tau
         self.frequency = frequency
-        self.space_step = 1e-12
-        self.torque = torque*self.T_K*self.k_b
+        self.space_step = 1e-8
+        self.torque = torque*self.KT
+        self.x0 = x0
+        self.analytical = analytical
+        self.x_pot = np.linspace(0, 2*np.pi, 50000)
         
     def tilted_periodic_potential(self, A, x):
-        return self.torque*x + A * np.cos(x * self.frequency)
-        
-    def generate_seq(self, N):
-        W_seq = np.random.normal(0, 1, N)
-        return W_seq
+        return self.torque*x + A * np.sin(x * self.frequency)
+    
+    def potential_analytic_derivative(self,A,x):
+        return self.torque + A * self.frequency*np.cos(x * self.frequency)
+    
+    def potential_derivative(self, A, x, dx=1e-6):
+        # Compute the derivative numerically using finite differences
+        derivative_at_x = (self.tilted_periodic_potential(A, x + dx) - self.tilted_periodic_potential(A, x - dx)) / (2 * dx)
+        return derivative_at_x
+    
+    def box_muller(self,N):
+        u1 = np.random.rand(N)
+        u2 = np.random.rand(N)
+        z = np.sqrt(-2 * np.log(u1)) * np.cos(2 * np.pi * u2)
+        return z
 
-    def main_traj(self, N, A):
+    def generate_seq(self, N):
+        W_seq = self.box_muller(N)
+        return W_seq
+    
+    
+    def make_potential_sin(self, ampl=None, plots=False):
+        ''' periodic sinusoidal potential, ampl and tilt in KT units
+            The barrier disappear at a tilt = ampl*pi*period (right?)
+        '''
+        U = ampl*self.KT*np.cos(self.x_pot*self.frequency) - self.torque*self.x_pot/(2*np.pi)*self.KT
+        if plots:
+            plt.figure('make_potential_sin', clear=True)
+            plt.plot(self.x_pot, U/self.KT, ',')
+            plt.ylabel('pot. [KT]')
+        return U
+    
+    def main_traj_numba(self, N, A, U, x0, ide ):
+        """
+        Langevin integration using numba. The potential U is an argument of type array.
+        U = self.make_potential_sin(self.x_pot,ampl = A)
+        """
+        dUdx = np.diff(U)/(2*np.pi/len(U))
+        x = np.zeros(N) 
+        x[0] = x0[ide]
+        thermnoise = np.sqrt(2*self.D*self.dt)*np.random.randn(N)
+        x = _make_trace(x, N, dUdx, self.dt, self.gamma, thermnoise)   
+        return x
+    
+    def main_traj_method(self, N, A):
         """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
 
         Args:
@@ -55,15 +129,52 @@ class DiffusionSimulation2:
         Returns:
             array: angular trajectory
         """
+        
         w = self.generate_seq(N)
-        A *= self.k_b * self.T_K
-        x = 0
-        positions = [ x := (x - (1 / self.rotational_drag) * self.dt_s *((self.tilted_periodic_potential(A, x + self.space_step) - self.tilted_periodic_potential(A, x - self.space_step)) / (2*self.space_step)) + np.sqrt(2 * self.rotational_einstein_diff * self.dt_s) * w[i]) for i in range(N)]
-        np.insert(positions,[0],0)
+        A *= self.KT
+        x0 = self.x0
+        x = x0
+        if self.analytical == False : 
+            positions = [ x := (x - (1 / self.gamma) * self.dt * self.potential_derivative(A,x) + np.sqrt(2 * self.D * self.dt) * w[i]) for i in range(N)]
+        else :
+            positions = [ x := (x - (1 / self.gamma) * self.dt * self.potential_analytic_derivative(A,x) + np.sqrt(2 * self.D * self.dt) * w[i]) for i in range(N)]
+
+        np.insert(positions,[0],x0)
         positions = np.array(positions) 
         
         positions.astype(np.float32)
         return positions
+    
+    def main_traj_debug(self,N,A):
+        """ Perform the overdamped rotational Langevin dynamic simulation in a given potential, all units are in S.I.
+            allow to decompose the trajectory in a stochastic and deterministic part.
+
+        Args:
+            N (int): trajectory length
+            A (float): barrier amplitude 
+
+        Returns:
+            array: angular trajectory, thermal_noise, deterministic
+        """
+        w = self.generate_seq(N)
+        A *= self.KT
+        x0 = 0
+        x = self.x0
+        positions = []
+        deter = []
+        stocha = []
+        for i in range(N):
+            positions.append(x)    
+            if self.analytical == False : 
+                deterministic = (1 / self.gamma) * self.dt *self.potential_derivative( A, x)
+            if self.analytical == True :
+                deterministic = (1 / self.gamma) * self.dt *self.potential_analytic_derivative( A, x)
+            stochastic = np.sqrt(2 * self.D * self.dt) * w[i] 
+            x += -deterministic + stochastic
+            deter.append(deterministic)
+            stocha.append(stochastic)
+                
+        return positions,stocha,deter
     
     def regular_linear_msd(self, traj = None, time_end = 1/4, time_skip = 100):
         """Compute the mean square displacement by iterating through an array of lag times
@@ -87,22 +198,73 @@ class DiffusionSimulation2:
         return np.array(msd)  
     
     
-    def run_parallel(self, repetitions=10, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
+    def run_parallel_numba(self, repetitions=None, n_jobs=5, npts = int(1e5), x0 = None, Amplitude = None, torque = 0,iteration = 0, save = True, print_time = False):
+        ''' parallel computations of generate_traj() 
+            parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
+        '''
+        # Parallel:
+        if print_time == True:
+            print(f'run_serial_parallel(): Parallel working...')
+        t0 = time.time()
+        sin_pot = self.make_potential_sin(ampl = Amplitude) 
+        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj_numba)(N = npts,A = Amplitude, U = sin_pot, x0 = x0, ide=i) for i in range(repetitions))
+        if print_time == True:
+            print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
+        if save == True:
+            np.save(f'{iteration}ite_trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',parallel_out)
+        return parallel_out
+    
+    def meta_parallel_numba(self, repetitions=None, n_jobs=5, npts = None, x0s = None, Amplitude = None, torque = 0, save = True): #x0 is an array of x0
+        '''
+        Because trajectory length >= 1e6points induces segmentation error, take the last trajectory point and inject it as the x0 of a new trajectory
+        '''
+        paquet = 1e8
+        t0 = time.time()
+        print('meta initialisation...')
+        iteration = int(npts/paquet)
+        if iteration > 1:
+            old_trajs = self.run_parallel_numba(repetitions=repetitions, n_jobs=n_jobs, npts = int(paquet), x0 = x0s, Amplitude = Amplitude, torque = torque)
+            for i in range(iteration-1):
+                #print(f'iteration n°{i} at {time.time() - t0:.1f} s ')
+                all_x0 = [all_x0 := traj[-1] for traj in old_trajs] #getting all the x0
+                trajs = self.run_parallel_numba(repetitions=repetitions, n_jobs=n_jobs, npts = int(paquet), x0 = all_x0, Amplitude = Amplitude,  torque = torque, iteration = i,save=False)
+                old_trajs = np.concatenate((old_trajs,trajs),axis=1)
+        else :
+            old_trajs = self.run_parallel_numba(repetitions=repetitions, n_jobs=n_jobs, npts = npts, x0 = x0s, Amplitude = Amplitude, torque = torque)
+        print(f'Done in {time.time() - t0:.1f} s ')
+        total_len = len(old_trajs[0])
+        if save == True:
+            np.save(f'final_trajectories_{total_len:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',old_trajs)
+
+          
+            
+    def run_parallel(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
         ''' parallel computations of generate_traj() 
             parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
         '''
         # Parallel:
         print(f'run_serial_parallel(): Parallel working...')
         t0 = time.time()
-        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj)(N = npts,A = Amplitude) for i in range(repetitions))
+        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj_method)(N = npts,A = Amplitude) for i in range(repetitions))
         print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
-        np.save(f'trajectories_{npts:.0f}points_amplitude_{Amplitude:.0f}kT_dt_{self.dt_s}_torque_{torque:.0f}kT',parallel_out)
+        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',parallel_out)
+        return parallel_out
+    
+    def run_parallel_debug(self, repetitions=None, n_jobs=5, npts = None, Amplitude = 0, torque = 0):
+        ''' parallel computations of generate_traj() 
+            parallel_out is a list (of len repetitions) of arrays "x(t)" (each of len npts)
+        '''
+        # Parallel:
+        print(f'run_serial_parallel(): Parallel working...')
+        t0 = time.time()
+        parallel_out = Parallel(n_jobs=n_jobs)(delayed(self.main_traj_debug)(N = npts,A = Amplitude) for i in range(repetitions))
+        print(f'run_serial_parallel(): Parallel done in {time.time() - t0:.1f} s')
+        np.save(f'trajectories_{npts:.0f},nb_traj_{repetitions}_points_amplitude_{Amplitude}kT,frequency_{self.frequency}_dt_{self.dt}_torque_{torque:.0f}kT',parallel_out)
         return parallel_out
     
     
     def parallel_no_chunk(self, traj, time_end=1/4, msd_nbpt = 2000,n_jobs=5):
         """
-        
 
         Parameters
         ----------
@@ -121,6 +283,7 @@ class DiffusionSimulation2:
             MSD array.
 
         """
+        t0 = time.time()
         max_lagtime = int(len(traj) * time_end)
         total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
         
@@ -131,15 +294,25 @@ class DiffusionSimulation2:
         msd_results = Parallel(n_jobs=n_jobs)(
             delayed(single_msd)(lag) for lag in total_lag_time 
         )
-        
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
         return msd_results
+    
+    def numba_msd(self, traj, time_end=1/4, msd_nbpt = 2000,print_time=False):
+        t0 = time.time()
+        max_lagtime = int(len(traj) * time_end)
+        total_lag_time = np.unique([int(lag) for lag in np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt))])
+        msd_results = single_msd(traj, total_lag_time)
+        if print_time==True:
+            print(f'MSD_numba done in {time.time() - t0:.1f} s')
+        
+        return msd_results 
         
     def load_traj_and_logmsd_chunk(self, traj_name = None,nb_chunks=10, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
         trajs = np.load(f'{traj_name}.npy')
         for i in range(len(trajs[:nb_traj])):
             self.run_parallel_msd_chunk_log(nb_chunks=nb_chunks, n_jobs=n_jobs, time_end=time_end, msd_nbpt = msd_nbpt, traj=trajs[i],n= f'logmsd{traj_name},num_{i:.0f}')
 
-    def mean_msd_and_time_axis(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+    def mean_msd_and_time_axis_std(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
         t0 = time.time()
         msd_matrix = []
         max_lagtime = int(len(trajs[0]) * time_end)
@@ -152,6 +325,72 @@ class DiffusionSimulation2:
         return time_axis,mean_msd,std,msd_matrix
     
 
+    def mean_msd_and_time_axis(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
+        msd_matrix = []
+        max_lagtime = int(len(trajs[0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.parallel_no_chunk(trajs[i], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
+        return time_axis,mean_msd
+    
+    def mean_msd_and_time_numba(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
+        msd_matrix = []
+        max_lagtime = int(len(trajs[0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.numba_msd(trajs[i], time_end=1/4, msd_nbpt = 2000))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
+        return time_axis,mean_msd
+    
+    def mean_msd_and_time_axis_debug(self, trajs, n_jobs=5, time_end=1/4, msd_nbpt = 2000, nb_traj = None):
+        t0 = time.time()
+        msd_matrix = []
+        max_lagtime = int(len(trajs[0][0]) * time_end)
+        for i in range(len(trajs[:nb_traj])):
+            msd_matrix.append(self.parallel_no_chunk(trajs[i][0], time_end=1/4, msd_nbpt = 2000,n_jobs=5))
+        mean_msd = np.concatenate(([0],np.mean(msd_matrix, axis=0)))
+        time_axis = np.concatenate(([0],np.unique((np.floor(np.logspace(0, (np.log10(max_lagtime)), msd_nbpt)))))) 
+        print(f'mean_msd_no_chunk(): Parallel done in {time.time() - t0:.1f} s')
+        return time_axis,mean_msd
+    
+    def full_auto_trajs_mean_msd(self,ampl_range = np.arange(8),nb_traj = 30, npts = int(1e8) ):
+        """
+        Generate trajectories, calculate and mean MSD for each value of amplitude.
+        Parameters
+        ----------
+        ampl_range : array, optional
+            Range of amplitude to iterate over. The default is np.arange(8).
+        nb_traj : TYPE
+            Number of trajectories generated per iteration.
+        npts : TYPE, optional
+            length of a trajectory. The default is None.
+
+        Returns
+        -------
+        None.
+
+        """
+        trajectories_box = []
+        mean_msd_box = []
+        x0s = np.zeros(npts)
+        for A in ampl_range:
+            trajs = self.meta_parallel_numba(self, repetitions=None, n_jobs=5, npts = None, x0s = None, Amplitude = A, torque = 0)
+            trajectories_box.append(trajs)
+            time_axis,mean_msd = self.mean_msd_and_time_numba(trajs, time_end=1/4, msd_nbpt = 2000, nb_traj = nb_traj)
+            mean_msd_box.append(mean_msd)
+        
+        
+        """
+        ipython lines :
+            D = DiffusionSimulation2(dt=1e-4)
+            time_axis,mean_msd_box,trajectories_box = D.full_auto_trajs_mean_msd(npts=int(1e6))
+        """
+        return time_axis,mean_msd_box,trajectories_box
     """
     Lifson and Jackson methods
     """
@@ -164,16 +403,12 @@ class DiffusionSimulation2:
         return result
     
     def lifson_jackson_noforce(self, amplitude): #Meet einstein coeff at 0 barrier
-        lifson_jackson1 = self.rotational_einstein_diff * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
+        lifson_jackson1 = self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))
         return lifson_jackson1 
         
-        
-        
-def compare_ampli(ampli_min,ampli_max,dt):
-    total_time = int(1e8*1e-5)
-    for A in range(ampli_min,ampli_max):
-        p = DiffusionSimulation2(dt=dt)
-        p.run_parallel( repetitions=50, n_jobs=5, npts = nb_points, Amplitude = Ampli, torque = 0)
+    def lifson_jackson_force(self, amplitude):
+        lifson_jackson2 = (self.D * (2 * np.pi / self.frequency)**2 / ((self.factor1(amplitude)) * (self.factor1(-amplitude)))) * (np.sinh(self.torque*(2*np.pi / self.frequency)/2))/(self.torque*(2*np.pi / self.frequency)/2)
+        return lifson_jackson2
 
     
 def store_msd_given_Amplitude(Ampli):
@@ -196,8 +431,12 @@ def store_msd_given_Amplitude(Ampli):
         
         
 def qth_moment(q,t,D_eff):
-    return((2**q)/(np.sqrt(np.pi)))*(D_eff*t)**(q/2)*np.math.factorial((1+q)/2)
+    t *= (0.1648)/(2*np.pi/26)**2
+    return((2**q)/(np.sqrt(np.pi)))*(D_eff*t)**(q/2)*scipy.special.gamma((1+q)/2)
     
+def second_moment(t,D_eff):
+    return(4/(np.sqrt(np.pi)))*(D_eff*t)*scipy.special.gamma(3/2)
+
 def generate_theory_msd(absciss,D_fit):
     theoretical_msd = []
     for t in absciss:
@@ -208,8 +447,8 @@ def generate_theory_msd(absciss,D_fit):
 def asdefaveri_msd(A,dt):
     p = DiffusionSimulation2(dt=dt)
     a = 2*np.pi/p.frequency
-    D = p.rotational_einstein_diff           
-    D_eff = p.lifson_jackson_noforce(5)
+    D = p.D           
+    D_eff = p.lifson_jackson_noforce(A)
     
     def defaveri_stationary(A):
         X = np.linspace(0,a,1000)
@@ -235,29 +474,9 @@ def asdefaveri_msd(A,dt):
     
     popt, pcov = scipy.optimize.curve_fit(linear_D, absciss_window, norm_msd_window,)
     D_fit, shift = popt[0], popt[1]
-    print('D_fit = ',D_fit)
+    print('D_fit = ',D_fit*2*D)
     print('D_eff = ',D_eff)
     stationary_state = defaveri_stationary(A) 
-    return absciss,norm_msd,D_fit,shift,stationary_state,a
-
-def plot_msd_asdefvari(A,dt):
-    absciss,norm_msd,D_fit,shift,stationary_state,a = asdefaveri_msd(A,dt)
-    
-    def linear_D(t,D,shift):
-        return (2*D*t + shift)/(a*a)
-    
-    plt.loglog(absciss,norm_msd)
-    plt.loglog(absciss,stationary_state*np.ones(len(absciss)),linestyle ='--',)
-    #plt.loglog(absciss[int(len(absciss)/2):],linear_D(absciss,D_eff,shift)[int(len(absciss)/2):],linestyle ='--',color='green')
-    frac = 1.5
-    plt.loglog(absciss,generate_theory_msd(absciss,D_fit),color='red')
-    plt.loglog(absciss[int(len(absciss)/frac):],linear_D(absciss,D_fit,shift)[int(len(absciss)/frac):],linestyle ='--',color='black') #[int(len(absciss)/4):]
-
-for A in range(0,5):
-    plot_msd_asdefvari(A,0.0005)
-
-plt.legend()
-plt.show()
-
+    return absciss,norm_msd,D_fit,D_eff,shift,stationary_state,a
 
 
